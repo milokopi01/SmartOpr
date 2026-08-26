@@ -1,9 +1,9 @@
-const CACHE_NAME = 'opr-sks-v1';
+const CACHE_NAME = 'opr-multi-v1';
 const urlsToCache = [
   './',
   './index.html',
   './manifest.json',
-  './Sekolah_Kebangsaan_Selama.jpg'
+  './logo.png'
 ];
 
 self.addEventListener('install', event => {
