@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Penjana OPR - SK Selama (K)</title>
+  <title>Penjana OPR - Pelbagai Sekolah</title>
   <link rel="manifest" href="manifest.json">
   <style>
     :root {
@@ -12,27 +12,31 @@
     }
     body { background: #cbd5e1; display: flex; flex-direction: column; align-items: center; font-family: 'Arial', sans-serif; margin: 0; padding: 20px; }
     
-    .controls { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; width: 210mm; box-shadow: 0 4px 10px rgba(0,0,0,0.15); box-sizing: border-box; }
-    .controls h3 { margin-top: 0; color: var(--primary); margin-bottom: 15px; }
-    .controls label { font-weight: bold; display: block; margin-top: 10px; font-size: 14px;}
-    .controls textarea { width: 100%; padding: 10px; margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-family: inherit;}
+    .controls, .settings-panel { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; width: 210mm; box-shadow: 0 4px 10px rgba(0,0,0,0.15); box-sizing: border-box; }
+    .controls h3, .settings-panel h3 { margin-top: 0; color: var(--primary); margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
+    .controls label, .settings-panel label { font-weight: bold; display: block; margin-top: 10px; font-size: 14px;}
+    .controls textarea, .settings-panel input { width: 100%; padding: 10px; margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-family: inherit;}
     
-    .btn-group { display: flex; gap: 10px; margin-top: 15px; }
-    .upload-group { display: flex; gap: 10px; margin-top: 5px; }
+    .btn-group, .upload-group { display: flex; gap: 10px; margin-top: 15px; }
+    .upload-group { margin-top: 5px; }
     
-    .controls button { color: white; border: none; font-weight: bold; cursor: pointer; padding: 12px; border-radius: 4px; flex: 1; transition: 0.2s;}
+    button { color: white; border: none; font-weight: bold; cursor: pointer; padding: 12px; border-radius: 4px; flex: 1; transition: 0.2s;}
     
     .btn-primary { background: var(--primary); }
     .btn-primary:hover { background: #0f2544; }
-    
     .btn-secondary { background: #4a5568; padding: 10px !important; }
     .btn-secondary:hover { background: #2d3748; }
-    
     .btn-print { background: #2f855a; }
     .btn-print:hover { background: #22543d; }
-    
     .btn-danger { background: #c53030; }
     .btn-danger:hover { background: #9b2c2c; }
+    
+    .btn-icon { background: none; color: var(--primary); padding: 5px; font-size: 20px; flex: none; border-radius: 50%; }
+    .btn-icon:hover { background: #e2e8f0; color: #0f2544; }
+
+    .settings-panel { display: none; background: #f8fafc; border: 2px solid var(--primary); }
+    .settings-panel.active { display: block; }
+    .logo-preview-small { max-height: 50px; margin-top: 5px; border: 1px solid #ccc; padding: 2px; background: white;}
 
     .a4-page { 
       width: 210mm; height: 297mm; background: white; box-shadow: 0 0 15px rgba(0,0,0,0.2); 
@@ -45,7 +49,6 @@
     .header img { height: 65px; width: auto; object-fit: contain; margin-right: 15px; }
     .school-info { flex: 1; text-align: center; color: var(--primary); }
     
-    /* Tambahan efek hover untuk elemen yang boleh diedit */
     [contenteditable="true"] { outline: none; transition: 0.3s; padding: 2px; border: 1px dashed transparent; }
     [contenteditable="true"]:hover, [contenteditable="true"]:focus { border: 1px dashed #a0aec0; background: #f8fafc; cursor: text; }
 
@@ -56,11 +59,9 @@
     .report-title-bar { background: var(--primary); color: white; display: flex; justify-content: space-between; align-items: center; padding: 4px 10px; border-radius: 3px; margin-bottom: 10px; }
     .report-title-bar h3 { margin: 0; font-size: 11pt; letter-spacing: 1px; }
     .report-title-bar span { font-size: 9pt; font-weight: bold; }
-    
-    /* Override warna hover untuk elemen dalam kotak biru */
     .report-title-bar [contenteditable="true"]:hover, .report-title-bar [contenteditable="true"]:focus { background: rgba(255,255,255,0.2); border-color: white; }
 
-    .text-content { flex: 1; font-size: 10.5pt; line-height: 1.5; text-align: justify; white-space: pre-wrap; overflow-y: auto; padding: 5px; }
+    .text-content { flex: 1; font-size: 10.5pt; line-height: 1.6; text-align: justify; overflow-y: auto; padding: 5px; }
 
     .bottom-half { height: 52%; border-top: 2px dashed #a0aec0; padding-top: 4mm; display: grid; gap: 4mm; }
     
@@ -81,7 +82,7 @@
 
     @media print {
       body { padding: 0; background: white; }
-      .controls { display: none; }
+      .controls, .settings-panel { display: none; }
       .a4-page { box-shadow: none; margin: 0; padding: 10mm 15mm; page-break-after: avoid; }
       .zoom-controls { display: none !important; }
       [contenteditable="true"] { border: none !important; background: transparent !important; }
@@ -91,8 +92,38 @@
 </head>
 <body>
 
+  <!-- Panel Tetapan -->
+  <div class="settings-panel" id="settingsPanel">
+    <h3>⚙️ Tetapan Profil Sekolah 
+      <button class="btn-icon" onclick="toggleSettings()" title="Tutup">❌</button>
+    </h3>
+    
+    <label>Nama Sekolah:</label>
+    <input type="text" id="setSchoolName" value="SEKOLAH KEBANGSAAN SELAMA (K)">
+    
+    <label>Alamat Sekolah:</label>
+    <input type="text" id="setSchoolAddress" value="Jalan Mahang, 09810 Serdang, Kedah Darul Aman">
+    
+    <label>No. Telefon & Emel (Hubungan):</label>
+    <input type="text" id="setSchoolContact" value="NO TEL : 01110661077 | EMEL: KBB1008@GMAIL.COM">
+    
+    <label>Muat Naik Logo Sekolah Baharu:</label>
+    <input type="file" id="setSchoolLogo" accept="image/*">
+    <div style="margin-top: 5px;">
+        <span style="font-size:12px; color:gray;">Pratonton Logo:</span><br>
+        <img id="setLogoPreview" class="logo-preview-small" src="logo.png" onerror="this.src='https://via.placeholder.com/50?text=LOGO'">
+    </div>
+    
+    <div class="btn-group">
+      <button onclick="saveSettings()" class="btn-print">💾 Simpan Tetapan (Tersimpan di Telefon)</button>
+      <button onclick="resetSettings()" class="btn-secondary">🔄 Kembali ke Asal (SK Selama)</button>
+    </div>
+  </div>
+
   <div class="controls">
-    <h3>Sistem Penjana OPR Automatik</h3>
+    <h3>Sistem Penjana OPR Automatik
+       <button class="btn-icon" onclick="toggleSettings()" title="Tetapan Sekolah">⚙️</button>
+    </h3>
     
     <label>Arahan Laporan (Prompt):</label>
     <textarea id="promptInput" rows="3" placeholder="Contoh: Laporan Program Gotong Royong Perdana. Huraikan objektif, aktiviti dan impak."></textarea>
@@ -112,29 +143,29 @@
       <button onclick="window.print()" class="btn-print">2. Simpan PDF</button>
     </div>
     <small style="color:#4a5568; display:block; margin-top:10px; font-size: 12px;">
-      *Tip: Semua paparan laporan di bawah (termasuk tajuk dan tarikh) boleh ditaip/diedit secara manual sebelum disimpan. Seret (drag) gambar untuk mengubah kedudukan.
+      *Tip: Klik ikon ⚙️ untuk tukar nama/logo sekolah. Semua paparan laporan di bawah boleh ditaip/diedit manual sebelum disimpan. Seret gambar untuk mengubah kedudukan.
     </small>
   </div>
 
   <div class="a4-page">
     <div class="top-half">
-      <!-- HEADER RASMI (Boleh Edit) -->
+      <!-- HEADER RASMI -->
       <div class="header">
-        <img src="Sekolah_Kebangsaan_Selama.jpg" alt="Logo Sekolah" onerror="this.src='https://via.placeholder.com/150x80?text=LOGO'">
+        <img id="printLogo" src="logo.png" alt="Logo Sekolah" onerror="this.src='https://via.placeholder.com/150x80?text=LOGO'">
         <div class="school-info">
-          <h2 contenteditable="true">SEKOLAH KEBANGSAAN SELAMA (K)</h2>
-          <p contenteditable="true">Jalan Mahang, 09810 Serdang, Kedah Darul Aman</p>
-          <p class="contact" contenteditable="true">NO TEL : 01110661077 | EMEL: KBB1008@GMAIL.COM</p>
+          <h2 id="printSchoolName" contenteditable="true">SEKOLAH KEBANGSAAN SELAMA (K)</h2>
+          <p id="printSchoolAddress" contenteditable="true">Jalan Mahang, 09810 Serdang, Kedah Darul Aman</p>
+          <p id="printSchoolContact" class="contact" contenteditable="true">NO TEL : 01110661077 | EMEL: KBB1008@GMAIL.COM</p>
         </div>
       </div>
       
-      <!-- RIBBON TAJUK (Boleh Edit) -->
+      <!-- RIBBON TAJUK -->
       <div class="report-title-bar">
         <h3 contenteditable="true">ONE PAGE REPORT (OPR)</h3>
         <span id="tarikhSemasa" contenteditable="true"></span>
       </div>
 
-      <!-- TEKS OPR (Boleh Edit) -->
+      <!-- TEKS OPR -->
       <div class="text-content" id="oprText" contenteditable="true">
         <em>Teks laporan rasmi akan dijana dan dipaparkan di sini... Anda juga boleh klik pada mana-mana bahagian laporan ini untuk menaip / menyunting secara manual.</em>
       </div>
@@ -148,6 +179,73 @@
   </div>
 
   <script>
+    // --- 1. TETAPAN SEKOLAH ---
+    const defaultSettings = {
+        name: "SEKOLAH KEBANGSAAN SELAMA (K)",
+        address: "Jalan Mahang, 09810 Serdang, Kedah Darul Aman",
+        contact: "NO TEL : 01110661077 | EMEL: KBB1008@GMAIL.COM",
+        logo: "logo.png"
+    };
+
+    function toggleSettings() {
+        document.getElementById('settingsPanel').classList.toggle('active');
+    }
+
+    document.getElementById('setSchoolLogo').addEventListener('change', function() {
+        if(this.files && this.files[0]) {
+            const reader = new FileReader();
+            reader.onload = e => document.getElementById('setLogoPreview').src = e.target.result;
+            reader.readAsDataURL(this.files[0]);
+        }
+    });
+
+    function saveSettings() {
+        const settings = {
+            name: document.getElementById('setSchoolName').value,
+            address: document.getElementById('setSchoolAddress').value,
+            contact: document.getElementById('setSchoolContact').value,
+            logo: document.getElementById('setLogoPreview').src
+        };
+        localStorage.setItem('oprSchoolSettings', JSON.stringify(settings));
+        applySettings(settings);
+        toggleSettings();
+        alert('Tetapan berjaya disimpan di dalam telefon anda.');
+    }
+
+    function resetSettings() {
+        if(confirm('Kembali ke tetapan asal (SK Selama)?')) {
+            localStorage.removeItem('oprSchoolSettings');
+            document.getElementById('setSchoolName').value = defaultSettings.name;
+            document.getElementById('setSchoolAddress').value = defaultSettings.address;
+            document.getElementById('setSchoolContact').value = defaultSettings.contact;
+            document.getElementById('setLogoPreview').src = defaultSettings.logo;
+            applySettings(defaultSettings);
+            toggleSettings();
+        }
+    }
+
+    function loadSettings() {
+        const saved = localStorage.getItem('oprSchoolSettings');
+        if(saved) {
+            const settings = JSON.parse(saved);
+            document.getElementById('setSchoolName').value = settings.name;
+            document.getElementById('setSchoolAddress').value = settings.address;
+            document.getElementById('setSchoolContact').value = settings.contact;
+            document.getElementById('setLogoPreview').src = settings.logo;
+            applySettings(settings);
+        } else {
+            applySettings(defaultSettings);
+        }
+    }
+
+    function applySettings(settings) {
+        document.getElementById('printSchoolName').innerText = settings.name;
+        document.getElementById('printSchoolAddress').innerText = settings.address;
+        document.getElementById('printSchoolContact').innerText = settings.contact;
+        document.getElementById('printLogo').src = settings.logo;
+    }
+
+    // --- 2. TARIKH & GAMBAR ---
     const today = new Date();
     const options = { day: '2-digit', month: 'short', year: 'numeric' };
     document.getElementById('tarikhSemasa').innerText = "TARIKH: " + today.toLocaleDateString('ms-MY', options).toUpperCase();
@@ -166,18 +264,10 @@
       });
     }
 
-    document.getElementById('cameraInput').addEventListener('change', function() {
-      handleImageFiles(this.files); this.value = '';
-    });
-    
-    document.getElementById('galleryInput').addEventListener('change', function() {
-      handleImageFiles(this.files); this.value = '';
-    });
+    document.getElementById('cameraInput').addEventListener('change', function() { handleImageFiles(this.files); this.value = ''; });
+    document.getElementById('galleryInput').addEventListener('change', function() { handleImageFiles(this.files); this.value = ''; });
 
-    function clearImages() {
-      imagesArray = [];
-      renderCollage();
-    }
+    function clearImages() { imagesArray = []; renderCollage(); }
 
     function renderCollage() {
       const collage = document.getElementById('imageCollage');
@@ -221,7 +311,6 @@
 
         controls.appendChild(btnIn);
         controls.appendChild(btnOut);
-
         imgContainer.appendChild(img);
         wrapper.appendChild(imgContainer);
         wrapper.appendChild(controls);
@@ -248,22 +337,15 @@
           e.preventDefault();
           let currentX = e.type.includes('mouse') ? e.pageX : e.touches[0].pageX;
           let currentY = e.type.includes('mouse') ? e.pageY : e.touches[0].pageY;
-          
-          let dx = currentX - startX;
-          let dy = currentY - startY;
-          
-          imgData.translateX += dx;
-          imgData.translateY += dy;
-          
+          imgData.translateX += (currentX - startX);
+          imgData.translateY += (currentY - startY);
           updateTransform(img, imgData);
-          
           startX = currentX;
           startY = currentY;
         }
 
         document.addEventListener('mouseup', dragEnd);
         document.addEventListener('touchend', dragEnd);
-
         function dragEnd() { isDragging = false; }
       });
     }
@@ -272,9 +354,9 @@
       imgElement.style.transform = `translate(${imgData.translateX}px, ${imgData.translateY}px) scale(${imgData.scale})`;
     }
 
+    // --- 3. PANGGILAN API GROQ ---
     async function generateOPR() {
-      // URL Web App anda kekal sama, tetapi PASTIKAN anda telah Redeploy code.gs versi baharu
-      const url = "https://script.google.com/macros/s/AKfycbxli7t69ElaVkpSRHdIjeARn6sMPmqbBw-zFZ29wkv0HEYvJcwa-GjVRi3IBj11cIOB/exec";
+      const url = "https://script.google.com/macros/s/AKfycbxZn4T4exLFBbN3qT_1JMFlmJd66EsJSbGDs2aQyZsGFEpfzrysfVomVnDu9a_IwzJi/exec";
       const prompt = document.getElementById('promptInput').value;
       const textContainer = document.getElementById('oprText');
 
@@ -294,16 +376,17 @@
 
         const result = await response.json();
         if(result.success) {
-          textContainer.innerHTML = result.text.replace(/\n/g, '<br>');
+          // Guna <br><br> untuk perenggan yang kemas
+          textContainer.innerHTML = result.text.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
         } else {
-          // Paparkan ralat sebenar jika API bermasalah
           textContainer.innerHTML = `<span style='color:red; font-weight:bold;'>${result.error}</span>`;
         }
       } catch(e) {
-         textContainer.innerHTML = `<span style='color:red; font-weight:bold;'>Ralat Sistem: Sila periksa sambungan internet atau pastikan URL Web App telah di-deploy semula.</span>`;
+         textContainer.innerHTML = `<span style='color:red; font-weight:bold;'>Ralat Sistem: Sila periksa sambungan internet.</span>`;
       }
     }
 
+    loadSettings();
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js');
     }
