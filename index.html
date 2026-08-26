@@ -165,6 +165,24 @@
     .rakam-kotak.active { display: block; }
     .rakam-kotak video { width: 100%; max-height: 320px; background: #000; border-radius: 6px; }
 
+
+    /* ===== Panel Pengurusan Ralat ===== */
+    .ralat-butang { position: fixed; right: 14px; bottom: 14px; z-index: 1200; background: linear-gradient(135deg,#f59e0b,#b45309); color:#fff; border:none; border-radius:999px; padding:12px 16px; font-weight:bold; box-shadow:0 6px 16px rgba(0,0,0,.3); cursor:pointer; flex:none; }
+    .ralat-butang .bilangan { background:#e11d48; border-radius:999px; padding:1px 7px; margin-left:6px; font-size:12px; }
+    .ralat-panel { position: fixed; inset: auto 10px 10px 10px; max-width: 720px; margin: 0 auto; background:#0f172a; color:#e2e8f0; border-radius:12px; z-index:1300; display:none; flex-direction:column; max-height:70vh; box-shadow:0 12px 40px rgba(0,0,0,.45); }
+    .ralat-panel.active { display:flex; }
+    .ralat-panel header { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 14px; border-bottom:1px solid #1e293b; font-weight:bold; }
+    .ralat-panel .isi { overflow:auto; padding:10px 14px; font-family: ui-monospace, Consolas, monospace; font-size:12px; white-space:pre-wrap; word-break:break-word; }
+    .ralat-panel .baris { border-bottom:1px dashed #1e293b; padding:6px 0; }
+    .ralat-panel .masa { color:#94a3b8; }
+    .ralat-panel .jenis-ralat { color:#fca5a5; font-weight:bold; }
+    .ralat-panel .jenis-info { color:#7dd3fc; font-weight:bold; }
+    .ralat-panel footer { display:flex; gap:8px; padding:10px 14px; border-top:1px solid #1e293b; flex-wrap:wrap; }
+    .ralat-panel button { flex:1 1 120px; padding:10px; border-radius:8px; }
+    .btn-salin { background: linear-gradient(135deg,#38bdf8,#0369a1); }
+    .btn-tutup-ralat { background: linear-gradient(135deg,#64748b,#334155); }
+    @media print { .ralat-butang, .ralat-panel { display:none !important; } }
+
     @media print {
       * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
       .split-bar { display: none !important; }
@@ -179,6 +197,135 @@
       @page { size: A4; margin: 0; }
     }
   </style>
+
+  <script>
+    /* ================= PENGURUSAN RALAT (global) ================= */
+    window.LogRalat = (function () {
+      var senarai = [];
+      var HAD = 200;
+
+      function masaKini() {
+        var d = new Date();
+        function p(n){ return (n < 10 ? '0' : '') + n; }
+        return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+      }
+
+      function tambah(jenis, mesej, butiran) {
+        var rekod = { masa: masaKini(), jenis: jenis, mesej: String(mesej || ''), butiran: butiran ? String(butiran) : '' };
+        senarai.push(rekod);
+        if (senarai.length > HAD) senarai.shift();
+        lukis();
+        if (jenis === 'ralat') kilat();
+        return rekod;
+      }
+
+      function kilat() {
+        var b = document.getElementById('ralatButang');
+        if (!b) return;
+        b.style.transform = 'scale(1.12)';
+        setTimeout(function () { b.style.transform = ''; }, 220);
+      }
+
+      function esc(t) {
+        return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      function lukis() {
+        var isi = document.getElementById('ralatIsi');
+        var kira = document.getElementById('ralatBilangan');
+        if (kira) {
+          var jum = senarai.filter(function (r) { return r.jenis === 'ralat'; }).length;
+          kira.textContent = jum;
+          kira.style.display = jum ? 'inline-block' : 'none';
+        }
+        if (!isi) return;
+        if (!senarai.length) { isi.innerHTML = '<div class="baris">Tiada ralat direkodkan. 👍</div>'; return; }
+        isi.innerHTML = senarai.map(function (r) {
+          return '<div class="baris"><span class="masa">[' + r.masa + ']</span> ' +
+            '<span class="' + (r.jenis === 'ralat' ? 'jenis-ralat' : 'jenis-info') + '">' + r.jenis.toUpperCase() + '</span> ' +
+            esc(r.mesej) + (r.butiran ? '\n' + esc(r.butiran) : '') + '</div>';
+        }).join('');
+        isi.scrollTop = isi.scrollHeight;
+      }
+
+      function teksPenuh() {
+        var kepala = 'LOG RALAT SISTEM OPR\n' +
+          'Tarikh: ' + new Date().toLocaleString() + '\n' +
+          'Peranti: ' + navigator.userAgent + '\n' +
+          'Halaman: ' + location.href + '\n' +
+          'Talian: ' + (navigator.onLine ? 'Dalam talian' : 'Luar talian') + '\n' +
+          '----------------------------------------\n';
+        if (!senarai.length) return kepala + '(Tiada ralat direkodkan)';
+        return kepala + senarai.map(function (r) {
+          return '[' + r.masa + '] ' + r.jenis.toUpperCase() + ': ' + r.mesej + (r.butiran ? '\n    ' + r.butiran : '');
+        }).join('\n');
+      }
+
+      async function salin() {
+        var teks = teksPenuh();
+        try {
+          await navigator.clipboard.writeText(teks);
+          alert('Log ralat telah disalin. Anda boleh tampal (paste) di mana-mana.');
+          return;
+        } catch (e) { /* guna cara lama */ }
+        var ta = document.createElement('textarea');
+        ta.value = teks;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus(); ta.select();
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        document.body.removeChild(ta);
+        if (ok) alert('Log ralat telah disalin.');
+        else window.prompt('Salin log ralat di bawah (tekan lama > Salin):', teks);
+      }
+
+      function kongsi() {
+        var teks = teksPenuh();
+        if (navigator.share) navigator.share({ title: 'Log Ralat OPR', text: teks }).catch(function () {});
+        else salin();
+      }
+
+      function togol(paksa) {
+        var p = document.getElementById('ralatPanel');
+        if (!p) return;
+        var buka = (typeof paksa === 'boolean') ? paksa : !p.classList.contains('active');
+        p.classList.toggle('active', buka);
+        if (buka) lukis();
+      }
+
+      window.addEventListener('error', function (ev) {
+        tambah('ralat', ev.message || 'Ralat tidak diketahui',
+          (ev.filename ? ev.filename.split('/').pop() : '') + (ev.lineno ? ':' + ev.lineno : ''));
+      });
+      window.addEventListener('unhandledrejection', function (ev) {
+        var r = ev.reason;
+        tambah('ralat', 'Janji gagal: ' + ((r && r.message) || r), (r && r.stack) ? String(r.stack).split('\n')[1] : '');
+      });
+      var errAsal = console.error;
+      console.error = function () {
+        try { tambah('ralat', Array.prototype.map.call(arguments, function (a) { return (a && a.message) || String(a); }).join(' ')); } catch (e) {}
+        errAsal.apply(console, arguments);
+      };
+
+      document.addEventListener('DOMContentLoaded', lukis);
+
+      return { tambah: tambah, ralat: function (m, b) { return tambah('ralat', m, b); }, info: function (m, b) { return tambah('info', m, b); }, salin: salin, kongsi: kongsi, togol: togol, kosong: function () { senarai = []; lukis(); }, teks: teksPenuh };
+    })();
+
+    /* Terjemah ralat rangkaian kepada bahasa mudah difahami */
+    function huraiRalatRangkaian(e, konteks) {
+      var m = (e && e.message) ? e.message : String(e);
+      if (/Failed to fetch|NetworkError|Load failed|network request failed/i.test(m)) {
+        return konteks + ': Sambungan ke pelayan gagal (Failed to fetch). Sebab biasa — (1) tiada Internet / talian terputus, ' +
+          '(2) alamat Apps Script (API_URL) salah atau deployment lama, (3) deployment tidak ditetapkan "Anyone", ' +
+          '(4) muat naik terlalu lama lalu terputus, atau (5) sekatan CORS pelayar.';
+      }
+      return konteks + ': ' + m;
+    }
+  </script>
+
 </head>
 <body>
 
@@ -255,8 +402,12 @@
       <input type="file" id="videoFileInput" accept="video/*" multiple style="display:none">
       <input type="file" id="videoCameraInput" accept="video/*" capture="environment" style="display:none">
 
-      <button onclick="document.getElementById('galleryInput').click()" class="btn-chip">🖼️ Tambah Gambar</button>
+      <button id="btnMenuGambar" onclick="togolMenuGambar()" class="btn-chip">🖼️ Tambah Gambar</button>
       <button id="btnMenuVideo" onclick="togolMenuVideo()" class="btn-chip">🎬 Tambah Video</button>
+    </div>
+    <div class="sub-menu" id="menuGambar">
+      <button onclick="pilihSumberGambar('kamera')" class="btn-chip">📷 Buka Kamera</button>
+      <button onclick="pilihSumberGambar('galeri')" class="btn-chip">🖼️ Muat Naik Gambar</button>
     </div>
     <div class="sub-menu" id="menuVideo">
       <button onclick="document.getElementById('videoFileInput').click()" class="btn-chip">🎞️ Pilih / Rakam Video</button>
@@ -542,6 +693,23 @@
         }
         reader.readAsDataURL(file);
       });
+    }
+
+    function togolMenuGambar() {
+      const m = document.getElementById('menuGambar');
+      const b = document.getElementById('btnMenuGambar');
+      const buka = m.classList.toggle('active');
+      b.classList.toggle('aktif', buka);
+    }
+
+    function pilihSumberGambar(sumber) {
+      try {
+        document.getElementById(sumber === 'kamera' ? 'cameraInput' : 'galleryInput').click();
+      } catch (e) {
+        LogRalat.ralat('Gagal membuka ' + sumber + ': ' + (e.message || e));
+      }
+      document.getElementById('menuGambar').classList.remove('active');
+      document.getElementById('btnMenuGambar').classList.remove('aktif');
     }
 
     document.getElementById('cameraInput').addEventListener('change', function() { handleImageFiles(this.files); this.value = ''; });
@@ -967,7 +1135,7 @@
 
 
     // ================= 6. VIDEO + KOD QR + SIMPANAN PERANTI =================
-    const API_URL = "https://script.google.com/macros/s/AKfycbyl_VDpdf81OGesNrMdKbg7rh_t8UCZaF_DmwQ3eJaoWSJog6CnVeTcr_iWyOOBnl4W/exec";
+    const API_URL = "https://script.google.com/macros/s/AKfycbzDsLkKYQdEQQ5bd5SMSoFxCMcWH5obyqp-uuriXa4jzlJd2Vzxm9j75dk3TwmhctaG/exec";
     let videosArray = [];
 
     // ---- Pangkalan data tempatan (IndexedDB) untuk memori komputer & telefon ----
@@ -1110,12 +1278,61 @@
         item.fileId = hasilAkhir.id;
         item.url = (pautan && pautan.url) || ('https://drive.google.com/file/d/' + hasilAkhir.id + '/view');
         item.peratus = 100;
+        LogRalat.info('Video "' + item.nama + '" berjaya dimuat naik ke Google Drive.');
       } catch (e) {
+        const pesan = huraiRalatRangkaian(e, 'Muat naik video "' + item.nama + '"');
+        LogRalat.ralat(pesan, 'Saiz: ' + saizMesra(item.saiz) + ' • Jenis: ' + item.jenis);
+        // Cuba cara sandaran (hantar terus melalui Apps Script) untuk fail bersaiz kecil
+        const bolehSandaran = fail && fail.size && fail.size <= 25 * 1024 * 1024;
+        if (bolehSandaran) {
+          LogRalat.info('Mencuba cara sandaran (muat naik terus melalui Apps Script)...');
+          const berjaya = await muatNaikVideoSandaran(item, fail);
+          if (berjaya) { renderVideos(); simpanVideoSesi(); return; }
+        }
         item.status = 'gagal';
-        item.ralat = (e.message || String(e));
+        item.ralat = pesan;
       }
       renderVideos();
       simpanVideoSesi();
+    }
+
+    /* Sandaran: tukar video kepada base64 dan hantar ke Apps Script (action=uploadVideo).
+       Digunakan apabila muat naik terus ke Google Drive gagal (contoh: sekatan CORS). */
+    async function muatNaikVideoSandaran(item, fail) {
+      try {
+        item.status = 'naik';
+        item.peratus = 0;
+        renderVideos();
+        const b64 = await new Promise((selesai, gagal) => {
+          const r = new FileReader();
+          r.onload = () => selesai(String(r.result));
+          r.onerror = () => gagal(new Error('Gagal membaca fail video daripada peranti.'));
+          r.readAsDataURL(fail);
+        });
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'uploadVideo', fileName: item.nama, mimeType: item.jenis, fileData: b64 })
+        });
+        const mentah = await res.text();
+        let hasil;
+        try { hasil = JSON.parse(mentah); }
+        catch (err) { throw new Error('Pelayan tidak membalas JSON: ' + mentah.slice(0, 160)); }
+        if (!hasil.success) throw new Error(hasil.error || 'Pelayan menolak muat naik.');
+        item.status = 'siap';
+        item.fileId = hasil.fileId;
+        item.url = hasil.url;
+        item.peratus = 100;
+        item.ralat = '';
+        LogRalat.info('Video "' + item.nama + '" berjaya dimuat naik melalui cara sandaran.');
+        return true;
+      } catch (e) {
+        const pesan = huraiRalatRangkaian(e, 'Sandaran muat naik video "' + item.nama + '"');
+        LogRalat.ralat(pesan);
+        item.status = 'gagal';
+        item.ralat = pesan;
+        return false;
+      }
     }
 
     function buangVideo(id) {
@@ -1398,5 +1615,17 @@
       navigator.serviceWorker.register('sw.js');
     }
   </script>
+
+  <button class="ralat-butang" id="ralatButang" onclick="LogRalat.togol()" title="Log ralat aplikasi">🐞 Ralat<span class="bilangan" id="ralatBilangan" style="display:none">0</span></button>
+  <div class="ralat-panel" id="ralatPanel">
+    <header><span>🐞 Log Ralat Aplikasi</span><span style="font-weight:normal; font-size:12px;">Tekan "Salin" untuk hantar kepada penyelenggara</span></header>
+    <div class="isi" id="ralatIsi"></div>
+    <footer>
+      <button class="btn-salin" onclick="LogRalat.salin()">📋 Salin Ralat</button>
+      <button class="btn-chip" onclick="LogRalat.kongsi()">📤 Kongsi</button>
+      <button class="btn-secondary" onclick="LogRalat.kosong()">🧹 Kosongkan</button>
+      <button class="btn-tutup-ralat" onclick="LogRalat.togol(false)">✖ Tutup</button>
+    </footer>
+  </div>
 </body>
 </html>
