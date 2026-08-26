@@ -692,8 +692,28 @@
     document.getElementById('maxWordsInput').addEventListener('input', kemasKiniKiraan);
 
     // --- 5. PANGGILAN API (JANA TEKS OPR) ---
+    // Pastikan nama sekolah dalam teks laporan sentiasa nama rasmi daripada Tetapan.
+    function betulkanNamaSekolah(teks, namaRasmi) {
+      const nama = (namaRasmi || '').trim();
+      if (!nama || !teks) return teks;
+      const corak = [
+        /\bSekolah(?:\s+(?:Menengah|Rendah))?(?:\s+(?:Kebangsaan|Jenis\s+Kebangsaan|Agama|Sukan|Seni))?(?:\s+[A-Z\u00C0-\u017F][\w\u00C0-\u017F'’-]*){0,4}/g,
+        /\b(?:SMK|SMKA|SK|SJKC|SJKT|SBP|SMJK)(?:\s+[A-Z\u00C0-\u017F][\w\u00C0-\u017F'’-]*){1,4}/g
+      ];
+      let hasil = teks;
+      corak.forEach(function (re) {
+        hasil = hasil.replace(re, function (padanan) {
+          if (padanan.trim().toUpperCase() === nama.toUpperCase()) return padanan;
+          return nama;
+        });
+      });
+      return hasil;
+
+    }
+
+
     async function generateOPR() {
-      const url = "https://script.google.com/macros/s/AKfycbzsTuhuCX_tT5i6QvfsAtJ-fOSYbaOz9mMWZDxueidMC4lz8e3vIHrY1upzTJNj870u/exec";
+      const url = "https://script.google.com/macros/s/AKfycbzDsLkKYQdEQQ5bd5SMSoFxCMcWH5obyqp-uuriXa4jzlJd2Vzxm9j75dk3TwmhctaG/exec";
       const promptAsal = document.getElementById('promptInput').value.trim();
       let maxWords = parseInt(document.getElementById('maxWordsInput').value) || 180;
       maxWords = Math.min(400, Math.max(50, maxWords));
@@ -703,6 +723,9 @@
         alert('Sila masukkan Arahan Laporan (Prompt).');
         return;
       }
+
+      // Nama sekolah rasmi daripada Tetapan Profil Sekolah
+      const namaSekolah = (document.getElementById('setSchoolName').value || '').trim();
 
       // Arahan tegas: Bahasa Melayu Malaysia sahaja + patuhi had perkataan
       const arahanTegas =
@@ -715,8 +738,12 @@
         `3. Hasilkan 2 hingga 3 perenggan ringkas dan padat sahaja. Tiada tajuk, tiada senarai bernombor, ` +
         `tiada tanda markdown (*, #, -), tiada mukadimah seperti "Berikut ialah laporan".\n` +
         `4. Gaya penulisan rasmi laporan sekolah: aktiviti, objektif, pelaksanaan dan impak.\n` +
-        `5. Balas dengan teks laporan sahaja.\n\n` +
+        `5. NAMA SEKOLAH: Gunakan HANYA nama sekolah rasmi berikut apabila merujuk kepada sekolah: ` +
+        `"${namaSekolah}". DILARANG SAMA SEKALI mencipta, mengubah atau menggunakan nama sekolah lain.\n` +
+        `6. Balas dengan teks laporan sahaja.\n\n` +
+        `NAMA SEKOLAH RASMI: ${namaSekolah}\n` +
         `MAKLUMAT PROGRAM: ${promptAsal}`;
+
 
       const generateBtn = document.getElementById('generateBtn');
       generateBtn.disabled = true;
@@ -755,7 +782,8 @@
 
         const teksDijana = typeof result.text === 'string' ? result.text.trim() : '';
         if (result.success && teksDijana && kiraPerkataan(teksDijana) >= 20) {
-          paparTeks(teksDijana, maxWords);
+          paparTeks(betulkanNamaSekolah(teksDijana, namaSekolah), maxWords);
+
         } else {
           paparRalat(result.error || 'AI tidak memulangkan teks laporan yang lengkap. Sila jana semula.');
         }
