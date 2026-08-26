@@ -447,7 +447,7 @@
     // --- 3. TARIKH & GAMBAR ---
     const today = new Date();
     const options = { day: '2-digit', month: 'short', year: 'numeric' };
-    document.getElementById('tarikhSemasa').innerText = "TARIKH: " + today.toLocaleDateString('ms-MY', options).toUpperCase();
+    document.getElementById('tarikhSemasa').innerText = "TARIKH: " + (today.getDate() + ' ' + ['Januari','Februari','Mac','April','Mei','Jun','Julai','Ogos','September','Oktober','November','Disember'][today.getMonth()] + ' ' + today.getFullYear()).toUpperCase();
 
     let imagesArray = [];
 
@@ -711,9 +711,68 @@
 
     }
 
+    // --- TARIKH: selaraskan tarikh prompt / header dengan teks dijana ---
+    const BULAN_PENUH = ['Januari','Februari','Mac','April','Mei','Jun','Julai','Ogos','September','Oktober','November','Disember'];
+    const BULAN_PADANAN = {
+      jan:0, januari:0, feb:1, februari:1, mac:2, mar:2, apr:3, april:3, mei:4, jun:5, jul:6, julai:6,
+      ogo:7, ogos:7, aug:7, ogs:7, sep:8, sept:8, september:8, okt:9, oct:9, oktober:9,
+      nov:10, november:10, dis:11, disember:11, dec:11
+    };
+
+    function formatTarikhPanjang(d) {
+      return d.getDate() + ' ' + BULAN_PENUH[d.getMonth()] + ' ' + d.getFullYear();
+    }
+
+    // Cari tarikh pertama dalam sesuatu teks. Pulangkan objek Date atau null.
+    function huraiTarikh(teks) {
+      if (!teks) return null;
+      const t = String(teks);
+      let m = t.match(/(\d{1,2})\s+([A-Za-z\u00C0-\u017F]{3,12})\.?\s+(\d{4})/);
+      if (m) {
+        const bln = BULAN_PADANAN[m[2].toLowerCase()];
+        if (bln !== undefined) {
+          const d = new Date(parseInt(m[3],10), bln, parseInt(m[1],10));
+          if (!isNaN(d.getTime())) return d;
+        }
+      }
+      m = t.match(/(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{4})/);
+      if (m) {
+        const d = new Date(parseInt(m[3],10), parseInt(m[2],10)-1, parseInt(m[1],10));
+        if (!isNaN(d.getTime())) return d;
+      }
+      return null;
+    }
+
+    function tarikhHeader() {
+      const el = document.getElementById('tarikhSemasa');
+      return huraiTarikh(el ? el.innerText : '');
+    }
+
+    function setTarikhHeader(d) {
+      const el = document.getElementById('tarikhSemasa');
+      if (el && d) el.innerText = 'TARIKH: ' + formatTarikhPanjang(d).toUpperCase();
+    }
+
+    // Ganti semua tarikh dalam teks dijana dengan tarikh rasmi program.
+    function selaraskanTarikh(teks, tarikhRasmi) {
+      if (!teks || !tarikhRasmi) return teks;
+      const rasmi = formatTarikhPanjang(tarikhRasmi);
+      let hasil = teks;
+      // Tarikh penuh: 26 Ogos 2026
+      hasil = hasil.replace(/\b(\d{1,2})\s+([A-Za-z\u00C0-\u017F]{3,12})\.?\s+(\d{4})\b/g, function (padanan, hari, bulan) {
+        return (BULAN_PADANAN[bulan.toLowerCase()] !== undefined) ? rasmi : padanan;
+      });
+      // Tarikh angka: 26/8/2026
+      hasil = hasil.replace(/\b\d{1,2}\s*[\/\-.]\s*\d{1,2}\s*[\/\-.]\s*\d{4}\b/g, rasmi);
+      // Tarikh tanpa tahun: 26 Ogos
+      hasil = hasil.replace(/\b(\d{1,2})\s+([A-Za-z\u00C0-\u017F]{3,12})\b(?!\s+\d{4})/g, function (padanan, hari, bulan) {
+        return (BULAN_PADANAN[bulan.toLowerCase()] !== undefined) ? rasmi : padanan;
+      });
+      return hasil;
+    }
 
     async function generateOPR() {
-      const url = "https://script.google.com/macros/s/AKfycbzsTuhuCX_tT5i6QvfsAtJ-fOSYbaOz9mMWZDxueidMC4lz8e3vIHrY1upzTJNj870u/exec";
+      const url = "https://script.google.com/macros/s/AKfycbzDsLkKYQdEQQ5bd5SMSoFxCMcWH5obyqp-uuriXa4jzlJd2Vzxm9j75dk3TwmhctaG/exec";
       const promptAsal = document.getElementById('promptInput').value.trim();
       let maxWords = parseInt(document.getElementById('maxWordsInput').value) || 180;
       maxWords = Math.min(400, Math.max(50, maxWords));
@@ -726,6 +785,13 @@
 
       // Nama sekolah rasmi daripada Tetapan Profil Sekolah
       const namaSekolah = (document.getElementById('setSchoolName').value || '').trim();
+
+      // TARIKH: guna tarikh dalam prompt; jika tiada, guna tarikh pada header laporan
+      const tarikhPrompt = huraiTarikh(promptAsal);
+      const tarikhProgram = tarikhPrompt || tarikhHeader() || new Date();
+      const tarikhTeks = formatTarikhPanjang(tarikhProgram);
+      // Selaraskan header dengan tarikh program yang dinyatakan dalam prompt
+      if (tarikhPrompt) setTarikhHeader(tarikhPrompt);
 
       // Arahan tegas: Bahasa Melayu Malaysia sahaja + patuhi had perkataan
       const arahanTegas =
@@ -740,8 +806,11 @@
         `4. Gaya penulisan rasmi laporan sekolah: aktiviti, objektif, pelaksanaan dan impak.\n` +
         `5. NAMA SEKOLAH: Gunakan HANYA nama sekolah rasmi berikut apabila merujuk kepada sekolah: ` +
         `"${namaSekolah}". DILARANG SAMA SEKALI mencipta, mengubah atau menggunakan nama sekolah lain.\n` +
-        `6. Balas dengan teks laporan sahaja.\n\n` +
+        `6. TARIKH: Satu-satunya tarikh yang boleh digunakan dalam laporan ialah "${tarikhTeks}". ` +
+        `DILARANG mencipta, mengubah atau menulis sebarang tarikh lain.\n` +
+        `7. Balas dengan teks laporan sahaja.\n\n` +
         `NAMA SEKOLAH RASMI: ${namaSekolah}\n` +
+        `TARIKH PROGRAM: ${tarikhTeks}\n` +
         `MAKLUMAT PROGRAM: ${promptAsal}`;
 
 
@@ -782,7 +851,7 @@
 
         const teksDijana = typeof result.text === 'string' ? result.text.trim() : '';
         if (result.success && teksDijana && kiraPerkataan(teksDijana) >= 20) {
-          paparTeks(betulkanNamaSekolah(teksDijana, namaSekolah), maxWords);
+          paparTeks(selaraskanTarikh(betulkanNamaSekolah(teksDijana, namaSekolah), tarikhProgram), maxWords);
 
         } else {
           paparRalat(result.error || 'AI tidak memulangkan teks laporan yang lengkap. Sila jana semula.');
