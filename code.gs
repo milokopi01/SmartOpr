@@ -1,19 +1,32 @@
 /**
  * BACKEND PENJANA OPR (Google Apps Script + Groq)
- * Kemas kini:
- *  - Senarai model berganti (fallback) supaya tidak gagal jika satu model tidak sah/ditamatkan
- *  - reasoning_format: "hidden" + pembuang <think> supaya "proses berfikir" tidak keluar
- *  - max_completion_tokens dikira dari had perkataan supaya teks tidak panjang mengarut
- *  - Penapis bahasa: buang ayat bahasa Inggeris & tanda markdown (elak bahasa rojak)
- *  - Pemotong perkataan di pelayan: hasil dijamin tidak melebihi had perkataan
+ * Versi 6 - pembetulan "jawapan mengarut" (proses berfikir bocor keluar)
+ *
+ * Punca masalah lama:
+ *  - Model penaakulan memulangkan blok berfikir yang TERPOTONG, contoh bermula
+ *    dengan "<think" tanpa tanda ">" ATAU tanpa tag langsung ("Here's a thinking
+ *    process:"). Penapis lama hanya mengesan "<think>" bertutup, jadi teks
+ *    berfikir dalam bahasa Inggeris terus dipaparkan sebagai laporan.
+ *
+ * Pembetulan:
+ *  1. Pengesan proses berfikir jauh lebih ketat (tag tidak lengkap, mukadimah
+ *     Inggeris, senarai analisis bernombor, "Program Info", dsb.)
+ *  2. Semakan bahasa: jika teks bukan majoriti Bahasa Melayu, ia DITOLAK.
+ *  3. Jika ditolak, sistem cuba semula (kunci lain / model lain) dan bukan
+ *     memaparkan sampah.
+ *  4. Hanya model bukan penaakulan digunakan secara lalai + had token lebih
+ *     longgar supaya laporan tidak terpotong.
  */
 
 // Model diuji mengikut urutan. Yang pertama berjaya akan digunakan.
 var MODELS = [
-  // Model bukan penaakulan didahulukan supaya jawapan terus berupa laporan.
   "llama-3.3-70b-versatile",
+  "llama-3.1-8b-instant",
   "openai/gpt-oss-120b"
 ];
+
+// Bilangan percubaan maksimum keseluruhan (elak kuota terbakar)
+var MAX_PERCUBAAN = 6;
 
 function doPost(e) {
   try {
@@ -29,8 +42,8 @@ function doPost(e) {
     maxWords = Math.min(400, Math.max(50, maxWords));
     var minWords = Math.floor(maxWords * 0.75);
 
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("apieky")
-             || SpreadsheetApp.getActiveSpreadsheet().getSheetByName("apikey");
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName("apieky") || ss.getSheetByName("apikey");
 
     if (!sheet) {
       return respond({ success: false, error: "Sheet bernama 'apieky' tidak dijumpai." });
@@ -51,19 +64,24 @@ function doPost(e) {
       "3. FORMAT: Tiada tajuk, tiada senarai bernombor, tiada tanda markdown (*, #, -). " +
       "Hasilkan 2 hingga 3 perenggan padat sahaja.\n" +
       "4. STRUKTUR: Huraikan pengenalan, objektif, pelaksanaan dan impak secara bersambung kemas.\n" +
-      "5. OUTPUT: Balas dengan teks laporan rasmi sahaja. Jangan tunjukkan proses berfikir, " +
-      "jangan tulis mukadimah seperti \"Berikut ialah laporan\" atau \"Here is the report\".";
+      "5. OUTPUT: Mula terus dengan ayat pertama laporan. DILARANG menulis proses berfikir, " +
+      "analisis arahan, tag <think>, senarai semak, atau mukadimah seperti \"Berikut ialah laporan\" " +
+      "atau \"Here is the report\".";
 
-    // Anggaran token: 1 perkataan BM ~ 2.2 token. Tambah sedikit ruang, tetapi kekal terhad.
-    var maxTokens = Math.min(1200, Math.round(maxWords * 2.6) + 80);
+    // Ruang token lebih longgar supaya laporan tidak terpotong di tengah jalan.
+    var maxTokens = Math.min(2000, Math.round(maxWords * 3.2) + 200);
 
     var resultText = "";
     var success = false;
     var lastErrorMessage = "";
     var modelDigunakan = "";
+    var percubaan = 0;
 
     for (var m = 0; m < MODELS.length && !success; m++) {
       for (var i = 0; i < keys.length && !success; i++) {
+        if (percubaan >= MAX_PERCUBAAN) break;
+        percubaan++;
+
         var apiKey = String(keys[i]).trim();
 
         try {
@@ -71,61 +89,45 @@ function doPost(e) {
             "model": MODELS[m],
             "messages": [
               { "role": "system", "content": systemPrompt },
-              { "role": "user", "content": prompt + "\n\n(Ingat: Bahasa Melayu Malaysia sahaja, maksimum " + maxWords + " patah perkataan.)" }
+              {
+                "role": "user",
+                "content": prompt +
+                  "\n\n(Ingat: Bahasa Melayu Malaysia sahaja, maksimum " + maxWords +
+                  " patah perkataan. Balas terus dengan perenggan laporan, tanpa sebarang analisis atau proses berfikir.)"
+              }
             ],
             "temperature": 0.2,
             "top_p": 0.9,
             "max_completion_tokens": maxTokens
           };
 
-          // Model penaakulan mesti menyembunyikan proses fikir. Jangan hantar
-          // parameter ini kepada model biasa kerana sesetengah model menolaknya.
-          if (MODELS[m].indexOf("gpt-oss") !== -1) {
+          // Model penaakulan mesti menyembunyikan proses fikir.
+          if (MODELS[m].indexOf("gpt-oss") !== -1 || MODELS[m].indexOf("qwen") !== -1 ||
+              MODELS[m].indexOf("deepseek") !== -1) {
             payload.reasoning_format = "hidden";
+            payload.reasoning_effort = "low";
           }
 
-          var options = {
-            "method": "post",
-            "headers": {
-              "Authorization": "Bearer " + apiKey,
-              "Content-Type": "application/json"
-            },
-            "payload": JSON.stringify(payload),
-            "muteHttpExceptions": true
-          };
+          var hasil = panggilGroq(apiKey, payload, maxWords);
 
-          var response = UrlFetchApp.fetch("https://api.groq.com/openai/v1/chat/completions", options);
-          var kod = response.getResponseCode();
-          var json = JSON.parse(response.getContentText());
-
-          if (kod == 200 && json.choices && json.choices.length > 0) {
-            var calon = ambilJawapanAkhir(json.choices[0].message.content || "");
-            calon = hadkanPerkataan(bersihkanBahasa(calon), maxWords);
-            if (kiraPerkataan(calon) >= 20) {
-              resultText = calon;
-              modelDigunakan = MODELS[m];
-              success = true;
-            } else {
-              lastErrorMessage = "Model tidak memulangkan teks laporan akhir yang lengkap.";
-            }
+          if (hasil.ok) {
+            resultText = hasil.teks;
+            modelDigunakan = MODELS[m];
+            success = true;
           } else {
-            lastErrorMessage = (json.error && json.error.message) ? json.error.message : ("Ralat " + kod + ": " + response.getContentText());
-            // Jika parameter reasoning_format tidak disokong, cuba semula tanpa parameter itu
-            if (lastErrorMessage.indexOf("reasoning_format") !== -1) {
+            lastErrorMessage = hasil.error;
+
+            // Jika parameter tidak disokong, cuba semula tanpa parameter itu.
+            if (/reasoning_format|reasoning_effort/i.test(lastErrorMessage)) {
               delete payload.reasoning_format;
-              options.payload = JSON.stringify(payload);
-              var response2 = UrlFetchApp.fetch("https://api.groq.com/openai/v1/chat/completions", options);
-              var json2 = JSON.parse(response2.getContentText());
-              if (response2.getResponseCode() == 200 && json2.choices && json2.choices.length > 0) {
-                var calon2 = ambilJawapanAkhir(json2.choices[0].message.content || "");
-                calon2 = hadkanPerkataan(bersihkanBahasa(calon2), maxWords);
-                if (kiraPerkataan(calon2) >= 20) {
-                  resultText = calon2;
-                  modelDigunakan = MODELS[m];
-                  success = true;
-                } else {
-                  lastErrorMessage = "Model tidak memulangkan teks laporan akhir yang lengkap.";
-                }
+              delete payload.reasoning_effort;
+              var hasil2 = panggilGroq(apiKey, payload, maxWords);
+              if (hasil2.ok) {
+                resultText = hasil2.teks;
+                modelDigunakan = MODELS[m];
+                success = true;
+              } else {
+                lastErrorMessage = hasil2.error;
               }
             }
           }
@@ -136,18 +138,16 @@ function doPost(e) {
     }
 
     if (!success) {
-      return respond({ success: false, error: "Gagal: " + lastErrorMessage });
-    }
-
-    var teksBersih = hadkanPerkataan(bersihkanBahasa(resultText), maxWords);
-    if (kiraPerkataan(teksBersih) < 20) {
-      return respond({ success: false, error: "AI tidak menghasilkan laporan lengkap. Sila tekan Jana sekali lagi." });
+      return respond({
+        success: false,
+        error: "Gagal menjana laporan yang sah. " + lastErrorMessage + " Sila tekan Jana sekali lagi."
+      });
     }
 
     return respond({
       success: true,
-      text: teksBersih,
-      words: kiraPerkataan(teksBersih),
+      text: resultText,
+      words: kiraPerkataan(resultText),
       maxWords: maxWords,
       model: modelDigunakan
     });
@@ -157,27 +157,119 @@ function doPost(e) {
   }
 }
 
-/** Ambil jawapan akhir dan tolak proses fikir yang tidak lengkap. */
+/** Satu panggilan ke Groq + semua penapisan/pengesahan. */
+function panggilGroq(apiKey, payload, maxWords) {
+  var options = {
+    "method": "post",
+    "headers": {
+      "Authorization": "Bearer " + apiKey,
+      "Content-Type": "application/json"
+    },
+    "payload": JSON.stringify(payload),
+    "muteHttpExceptions": true
+  };
+
+  var response = UrlFetchApp.fetch("https://api.groq.com/openai/v1/chat/completions", options);
+  var kod = response.getResponseCode();
+  var mentah = response.getContentText();
+  var json;
+  try { json = JSON.parse(mentah); } catch (e) { json = null; }
+
+  if (kod != 200 || !json || !json.choices || json.choices.length === 0) {
+    var mesej = (json && json.error && json.error.message) ? json.error.message : ("Ralat " + kod + ".");
+    return { ok: false, error: mesej };
+  }
+
+  var teks = String(json.choices[0].message.content || "");
+  var calon = ambilJawapanAkhir(teks);
+
+  if (!calon) {
+    return { ok: false, error: "Model memulangkan proses berfikir, bukan laporan." };
+  }
+
+  calon = hadkanPerkataan(bersihkanBahasa(calon), maxWords);
+
+  if (kiraPerkataan(calon) < 40) {
+    return { ok: false, error: "Teks laporan terlalu pendek atau terpotong." };
+  }
+
+  if (!kebanyakanBahasaMelayu(calon)) {
+    return { ok: false, error: "Teks yang dijana bukan Bahasa Melayu." };
+  }
+
+  return { ok: true, teks: calon };
+}
+
+/**
+ * Ambil jawapan akhir dan tolak proses fikir.
+ * Memulangkan "" jika teks itu sebenarnya proses berfikir (maka ditolak).
+ */
 function ambilJawapanAkhir(teks) {
   var hasil = String(teks || "").trim();
-  var tutupThink = hasil.toLowerCase().lastIndexOf("</think>");
-  if (tutupThink !== -1) {
-    hasil = hasil.substring(tutupThink + 8).trim();
+
+  // 1) Jika ada tag penutup (walaupun tidak sempurna), ambil bahagian selepasnya.
+  var padananTutup = hasil.match(/<\s*\/\s*think[^>]*>?/gi);
+  if (padananTutup) {
+    var terakhir = padananTutup[padananTutup.length - 1];
+    var idx = hasil.lastIndexOf(terakhir);
+    hasil = hasil.substring(idx + terakhir.length).trim();
   }
-  // Respons terpotong ketika masih berfikir tidak boleh dipaparkan sebagai laporan.
-  if (/<think>/i.test(hasil) || /thinking process|analyze user input|output generation/i.test(hasil)) {
-    return "";
+
+  // 2) Tag pembuka yang masih tinggal (termasuk "<think" tanpa ">") = terpotong.
+  if (/<\s*\/?\s*think/i.test(hasil)) return "";
+
+  // 3) Corak proses berfikir tanpa tag.
+  var corakBerfikir = [
+    /here'?s? (a|my|the) (thinking|thought) process/i,
+    /thinking process/i,
+    /let me (think|analyz|break)/i,
+    /^\s*\d+\.\s*(analyze|analyse|understand|plan|draft|review)/im,
+    /analyz(e|ing) user input/i,
+    /user (input|request|prompt)\s*:/i,
+    /program info\s*:/i,
+    /output generation/i,
+    /(strict|mandatory) instructions?\s*:/i,
+    /word count\s*:/i,
+    /^\s*-\s*(role|task|language|length|format|structure|output)\s*:/im
+  ];
+  for (var i = 0; i < corakBerfikir.length; i++) {
+    if (corakBerfikir[i].test(hasil)) return "";
   }
+
   return hasil;
+}
+
+/** Semak teks benar-benar Bahasa Melayu (elak jawapan Inggeris lolos). */
+function kebanyakanBahasaMelayu(teks) {
+  var t = String(teks).toLowerCase();
+  var kata = t.match(/[a-zà-ÿ']+/g) || [];
+  if (kata.length < 20) return false;
+
+  var penandaBM = ["yang", "dan", "ini", "itu", "dengan", "untuk", "pada", "telah", "adalah",
+                   "ialah", "serta", "dalam", "oleh", "akan", "kepada", "juga", "murid",
+                   "sekolah", "program", "aktiviti", "objektif", "impak", "pihak", "dapat",
+                   "bagi", "secara", "para", "hasil", "guru", "berjaya", "melalui"];
+  var penandaEN = ["the", "and", "of", "is", "was", "were", "with", "by", "for", "this",
+                   "that", "are", "from", "their", "they", "has", "have", "been", "which",
+                   "while", "should", "there", "students", "school", "report"];
+
+  var bm = 0, en = 0;
+  for (var i = 0; i < kata.length; i++) {
+    if (penandaBM.indexOf(kata[i]) !== -1) bm++;
+    if (penandaEN.indexOf(kata[i]) !== -1) en++;
+  }
+
+  // Sekurang-kurangnya 6% penanda BM, dan penanda BM mesti mengatasi Inggeris.
+  return (bm / kata.length) >= 0.06 && bm > en;
 }
 
 /** Buang blok "berfikir", tanda markdown, mukadimah dan ayat bahasa Inggeris. */
 function bersihkanBahasa(teks) {
   var hasil = String(teks || "");
 
-  // Buang blok penaakulan
-  hasil = hasil.replace(/<think>[\s\S]*?<\/think>/gi, "");
-  hasil = hasil.replace(/<\/?think>/gi, "");
+  // Buang blok penaakulan (walaupun tag tidak sempurna)
+  hasil = hasil.replace(/<\s*think[^>]*>[\s\S]*?<\s*\/\s*think[^>]*>/gi, "");
+  hasil = hasil.replace(/<\s*\/?\s*think[^>]*>?/gi, "");
 
   // Buang tanda markdown
   hasil = hasil.replace(/[*#_`>]+/g, "");
@@ -185,6 +277,9 @@ function bersihkanBahasa(teks) {
   // Buang mukadimah
   hasil = hasil.replace(/^\s*(here is|here's|here are|sure|certainly|okay|below is|draft|report)\b[^\n:.]*[:.]?\s*/i, "");
   hasil = hasil.replace(/^\s*(berikut(nya)?( ialah| adalah)?|laporan)\s*:\s*/i, "");
+
+  // Buang baris label seperti "Tajuk:", "Objektif:" jika berdiri sendiri
+  hasil = hasil.replace(/^\s*(tajuk|title|word count|jumlah perkataan)\s*:.*$/gim, "");
 
   // Buang ayat yang masih dalam bahasa Inggeris
   var perenggan = hasil.split(/\n{2,}/).map(function (p) {
@@ -219,7 +314,7 @@ function bersihkanBahasa(teks) {
     });
   });
 
-  return hasil.replace(/[ \t]{2,}/g, " ").trim();
+  return hasil.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function ayatBahasaInggeris(ayat) {
