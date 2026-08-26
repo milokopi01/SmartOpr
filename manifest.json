@@ -5,7 +5,7 @@
   "display": "standalone",
   "background_color": "#cbd5e1",
   "theme_color": "#1A365D",
-  "description": "Sistem Penjana One Page Report untuk kegunaan pelbagai sekolah",
+  "description": "Sistem Penjana One Page Report: teks AI, gambar, video (Google Drive) dan Kod QR",
   "icons": [
     {
       "src": "logo.png",

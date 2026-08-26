@@ -1,9 +1,10 @@
-const CACHE_NAME = 'opr-multi-v8';
+const CACHE_NAME = 'opr-cache-v10';
 const urlsToCache = [
   './',
   './index.html',
   './manifest.json',
-  './logo.png'
+  './logo.png',
+  './qrcode.js'
 ];
 
 self.addEventListener('install', event => {

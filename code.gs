@@ -28,9 +28,48 @@ var MODELS = [
 // Bilangan percubaan maksimum keseluruhan (elak kuota terbakar)
 var MAX_PERCUBAAN = 6;
 
+// ID folder Google Drive khas untuk simpanan video aktiviti
+var FOLDER_VIDEO_ID = "1l1RNAGy9jyVnFkxDvk9UMt4cTdqcDW_c";
+
+/**
+ * Muat naik video ke folder Google Drive dan pulangkan pautan awam
+ * (pautan ini akan dijadikan Kod QR di dalam laporan OPR).
+ */
+function muatNaikVideo(data) {
+  try {
+    var b64 = String(data.fileData || "");
+    if (b64.indexOf("base64,") !== -1) b64 = b64.split("base64,")[1];
+    if (!b64) return respond({ success: false, error: "Tiada data video diterima." });
+
+    var namaFail = String(data.fileName || ("video_" + new Date().getTime() + ".mp4"));
+    var jenis = String(data.mimeType || "video/mp4");
+    var blob = Utilities.newBlob(Utilities.base64Decode(b64), jenis, namaFail);
+
+    var folder = DriveApp.getFolderById(FOLDER_VIDEO_ID);
+    var fail = folder.createFile(blob);
+    try {
+      fail.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    } catch (err) { /* perkongsian mungkin dihadkan oleh domain sekolah */ }
+
+    return respond({
+      success: true,
+      fileId: fail.getId(),
+      name: fail.getName(),
+      url: "https://drive.google.com/file/d/" + fail.getId() + "/view"
+    });
+  } catch (err) {
+    return respond({ success: false, error: "Gagal memuat naik video: " + err });
+  }
+}
+
 function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
+
+    // Tindakan muat naik video ke Google Drive
+    if (String(data.action || "") === "uploadVideo") {
+      return muatNaikVideo(data);
+    }
     var prompt = String(data.prompt || "").trim();
 
     if (!prompt) {
