@@ -192,7 +192,7 @@
     <input type="file" id="setSchoolLogo" accept="image/*">
     <div style="margin-top: 5px;">
         <span style="font-size:12px; color:gray;">Pratonton Logo:</span><br>
-        <img id="setLogoPreview" class="logo-preview-small" src="logo.png" onerror="this.src='https://via.placeholder.com/50?text=LOGO'">
+        <img id="setLogoPreview" class="logo-preview-small" src="sks.png" onerror="this.src='https://via.placeholder.com/50?text=LOGO'">
     </div>
 
     <label style="margin-top:18px;">🎨 Templet Reka Bentuk Laporan (10 pilihan):</label>
@@ -285,7 +285,7 @@
         <div class="top-half">
           <!-- HEADER RASMI -->
           <div class="header">
-            <img id="printLogo" src="logo.png" alt="Logo Sekolah" onerror="this.src='https://via.placeholder.com/150x80?text=LOGO'">
+            <img id="printLogo" src="sks.png" alt="Logo Sekolah" onerror="this.src='https://via.placeholder.com/150x80?text=LOGO'">
             <div class="school-info">
               <h2 id="printSchoolName" contenteditable="true">SEKOLAH KEBANGSAAN SELAMA (K)</h2>
               <p id="printSchoolAddress" contenteditable="true">Jalan Mahang, 09810 Serdang, Kedah Darul Aman</p>
@@ -338,7 +338,8 @@
         name: "SEKOLAH KEBANGSAAN SELAMA (K)",
         address: "Jalan Mahang, 09810 Serdang, Kedah Darul Aman",
         contact: "NO TEL : 01110661077 | EMEL: KBB1008@GMAIL.COM",
-        logo: "logo.png"
+        // Logo lalai header/laporan (fail dalam GitHub). logo.png dikhaskan untuk ikon pemasangan app (PWA).
+        logo: "sks.png"
     };
 
     // --- 1b. TEMPLET REKA BENTUK (10 PILIHAN) ---
@@ -481,6 +482,10 @@
         const saved = localStorage.getItem('oprSchoolSettings');
         if(saved) {
             const settings = JSON.parse(saved);
+            // Migrasi: tetapan lama yang masih guna ikon app sebagai logo header
+            if (!settings.logo || settings.logo === 'logo.png' || settings.logo === './logo.png') {
+                settings.logo = defaultSettings.logo;
+            }
             document.getElementById('setSchoolName').value = settings.name;
             document.getElementById('setSchoolAddress').value = settings.address;
             document.getElementById('setSchoolContact').value = settings.contact;
@@ -956,7 +961,7 @@
 
 
     // ================= 6. VIDEO + KOD QR + SIMPANAN PERANTI =================
-    const API_URL = "https://script.google.com/macros/s/AKfycbxZI6z18y6IW1pHhQuX1Or9LyFctAJ0hTgl703_5HFd83eySm1Ydc6ggh2cN0hVpWzk/exec";
+    const API_URL = "https://script.google.com/macros/s/AKfycbzDsLkKYQdEQQ5bd5SMSoFxCMcWH5obyqp-uuriXa4jzlJd2Vzxm9j75dk3TwmhctaG/exec";
     let videosArray = [];
 
     // ---- Pangkalan data tempatan (IndexedDB) untuk memori komputer & telefon ----
