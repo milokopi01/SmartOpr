@@ -16,6 +16,7 @@
     .controls h3, .settings-panel h3 { margin-top: 0; color: var(--primary); margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
     .controls label, .settings-panel label { font-weight: bold; display: block; margin-top: 10px; font-size: 14px;}
     .controls textarea, .settings-panel input { width: 100%; padding: 10px; margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-family: inherit;}
+    .controls input[type="number"] { width: 100px; padding: 8px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px;}
     
     .btn-group, .upload-group { display: flex; gap: 10px; margin-top: 15px; }
     .upload-group { margin-top: 5px; }
@@ -125,6 +126,12 @@
        <button class="btn-icon" onclick="toggleSettings()" title="Tetapan Sekolah">⚙️</button>
     </h3>
     
+    <label>Had Kepanjangan Maksimum (Patah Perkataan):</label>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <input type="number" id="maxWordsInput" value="180" min="50" max="400">
+      <small style="color:gray;">*180 - 200 patah perkataan adalah paling sesuai untuk separuh A4.</small>
+    </div>
+
     <label>Arahan Laporan (Prompt):</label>
     <textarea id="promptInput" rows="3" placeholder="Contoh: Laporan Program Gotong Royong Perdana. Huraikan objektif, aktiviti dan impak."></textarea>
     
@@ -356,8 +363,9 @@
 
     // --- 3. PANGGILAN API GROQ ---
     async function generateOPR() {
-      const url = "https://script.google.com/macros/s/AKfycbx4tfJgQ3uz0m2z4G9iqYeAMrGIs60eul9K5ThXV09AkLD6JcvCF8W-Cd94Gn1cDZ8/exec";
+      const url = "https://script.google.com/macros/s/AKfycbyM1W63kXnxEs6dFG0Smjsy6SaGMj_-rtQsz9r4x3MqQyMisYevc3_DSE4oeMFfM0SI/exec";
       const prompt = document.getElementById('promptInput').value;
+      const maxWords = document.getElementById('maxWordsInput').value; // Mengambil nilai had perkataan dari pengguna
       const textContainer = document.getElementById('oprText');
 
       if(!prompt) {
@@ -370,13 +378,13 @@
       try {
         const response = await fetch(url, {
           method: 'POST',
-          body: JSON.stringify({ prompt: prompt }), 
+          body: JSON.stringify({ prompt: prompt, maxWords: parseInt(maxWords) }), // Menghantar data ke backend
           headers: { 'Content-Type': 'text/plain;charset=utf-8' }
         });
 
         const result = await response.json();
         if(result.success) {
-          // Guna <br><br> untuk perenggan yang kemas
+          // Hanya memproses dan memformat laporan yang diterima
           textContainer.innerHTML = result.text.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
         } else {
           textContainer.innerHTML = `<span style='color:red; font-weight:bold;'>${result.error}</span>`;
