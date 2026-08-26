@@ -15,7 +15,7 @@
     
     /* Bahagian Kawalan PWA (Sembunyi waktu cetak) */
     .controls { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; width: 210mm; box-shadow: 0 4px 10px rgba(0,0,0,0.15); box-sizing: border-box; }
-    .controls h3 { margin-top: 0; color: var(--primary); }
+    .controls h3 { margin-top: 0; color: var(--primary); margin-bottom: 15px; }
     .controls label { font-weight: bold; display: block; margin-top: 10px; font-size: 14px;}
     .controls input, .controls textarea { width: 100%; padding: 10px; margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-family: inherit;}
     
@@ -89,8 +89,6 @@
   <!-- Kawalan PWA -->
   <div class="controls">
     <h3>Sistem Penjana OPR Automatik</h3>
-    <label>URL Web App Google Script (API):</label>
-    <input type="text" id="scriptUrl" placeholder="Paste URL Web App Code.gs di sini...">
     
     <label>Arahan Laporan (Prompt):</label>
     <textarea id="promptInput" rows="3" placeholder="Contoh: Laporan Program Gotong Royong Perdana. Huraikan objektif, aktiviti dan impak."></textarea>
@@ -113,7 +111,7 @@
     <div class="top-half">
       <!-- HEADER RASMI SK SELAMA (K) -->
       <div class="header">
-        <img src="Sekolah_Kebangsaan_Selama.jpg" alt="Logo SK Selama">
+        <img src="Sekolah_Kebangsaan_Selama.jpg" alt="Logo SK Selama" onerror="this.src='https://via.placeholder.com/150x80?text=LOGO'">
         <div class="school-info">
           <h2>SEKOLAH KEBANGSAAN SELAMA (K)</h2>
           <p>Jalan Mahang, 09810 Serdang, Kedah Darul Aman</p>
@@ -270,14 +268,14 @@
       imgElement.style.transform = `translate(${imgData.translateX}px, ${imgData.translateY}px) scale(${imgData.scale})`;
     }
 
-    // Panggil API Groq melalui Google Apps Script
+    // Panggil API Groq melalui Google Apps Script (URL Hardcoded)
     async function generateOPR() {
-      const url = document.getElementById('scriptUrl').value;
+      const url = "https://script.google.com/macros/s/AKfycbyM1W63kXnxEs6dFG0Smjsy6SaGMj_-rtQsz9r4x3MqQyMisYevc3_DSE4oeMFfM0SI/exec";
       const prompt = document.getElementById('promptInput').value;
       const textContainer = document.getElementById('oprText');
 
-      if(!url || !prompt) {
-        alert('Sila masukkan URL Web App dan Arahan Laporan.');
+      if(!prompt) {
+        alert('Sila masukkan Arahan Laporan (Prompt).');
         return;
       }
 
@@ -298,7 +296,7 @@
           textContainer.innerHTML = `<span style='color:red; font-weight:bold;'>Ralat API: ${result.error}</span>`;
         }
       } catch(e) {
-         textContainer.innerHTML = `<span style='color:red; font-weight:bold;'>Ralat Rangkaian: Sila pastikan URL Web App Google Script anda betul.</span>`;
+         textContainer.innerHTML = `<span style='color:red; font-weight:bold;'>Ralat Rangkaian: Permintaan ke pelayan gagal.</span>`;
       }
     }
 
