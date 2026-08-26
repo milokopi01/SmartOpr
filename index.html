@@ -211,7 +211,7 @@
     </div>
 
     <div class="btn-group">
-      <button onclick="generateOPR()" class="btn-primary">1. Jana Teks OPR (AI)</button>
+      <button id="generateBtn" onclick="generateOPR()" class="btn-primary">1. Jana Teks OPR (AI)</button>
       <button onclick="clearImages()" class="btn-danger">Padam Gambar</button>
       <button onclick="window.print()" class="btn-print">2. Simpan PDF</button>
     </div>
@@ -669,7 +669,14 @@
     function paparTeks(teks, maxWords) {
       const textContainer = document.getElementById('oprText');
       const bersih = hadkanPerkataan(bersihkanBahasa(teks), maxWords);
-      textContainer.innerHTML = bersih.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
+      if (!bersih || kiraPerkataan(bersih) < 20) {
+        paparRalat('AI tidak memulangkan teks laporan yang lengkap. Sila jana semula.');
+        return;
+      }
+      textContainer.textContent = bersih;
+      textContainer.style.whiteSpace = 'pre-line';
+      textContainer.style.color = '';
+      textContainer.style.fontWeight = '';
       kemasKiniKiraan();
     }
 
@@ -686,7 +693,7 @@
 
     // --- 5. PANGGILAN API (JANA TEKS OPR) ---
     async function generateOPR() {
-      const url = "https://script.google.com/macros/s/AKfycbzV152LelbrLJzmB5JcZRRIB4DEzkbZdPL1dxTTFrCXksNxBJfzjlj8laQUbl_lZIuF/exec";
+      const url = "https://script.google.com/macros/s/AKfycbzDsLkKYQdEQQ5bd5SMSoFxCMcWH5obyqp-uuriXa4jzlJd2Vzxm9j75dk3TwmhctaG/exec";
       const promptAsal = document.getElementById('promptInput').value.trim();
       let maxWords = parseInt(document.getElementById('maxWordsInput').value) || 180;
       maxWords = Math.min(400, Math.max(50, maxWords));
@@ -711,7 +718,10 @@
         `5. Balas dengan teks laporan sahaja.\n\n` +
         `MAKLUMAT PROGRAM: ${promptAsal}`;
 
-      textContainer.innerHTML = "<i style='color: var(--primary)'>Sedang memproses laporan. Sila tunggu sebentar...</i>";
+      const generateBtn = document.getElementById('generateBtn');
+      generateBtn.disabled = true;
+      generateBtn.textContent = 'Sedang Menjana...';
+      textContainer.textContent = 'Sedang memproses laporan. Sila tunggu sebentar...';
 
       try {
         const response = await fetch(url, {
@@ -726,6 +736,9 @@
         });
 
         const mentah = await response.text();
+        if (!response.ok) {
+          throw new Error(`Pelayan gagal (${response.status}).`);
+        }
         let result;
         try {
           result = JSON.parse(mentah);
@@ -736,18 +749,30 @@
           } else if (mentah.indexOf('accounts.google.com') !== -1 || mentah.indexOf('Sign in') !== -1) {
             sebab = 'Deployment tidak dibuka kepada umum. Tetapkan Who has access: Anyone.';
           }
-          textContainer.innerHTML = `<span style='color:red; font-weight:bold;'>Ralat Backend: ${sebab}</span>`;
+          paparRalat(`Ralat Backend: ${sebab}`);
           return;
         }
 
-        if(result.success) {
-          paparTeks(result.text || '', maxWords);
+        const teksDijana = typeof result.text === 'string' ? result.text.trim() : '';
+        if (result.success && teksDijana && kiraPerkataan(teksDijana) >= 20) {
+          paparTeks(teksDijana, maxWords);
         } else {
-          textContainer.innerHTML = `<span style='color:red; font-weight:bold;'>${result.error || 'Ralat menjana laporan.'}</span>`;
+          paparRalat(result.error || 'AI tidak memulangkan teks laporan yang lengkap. Sila jana semula.');
         }
       } catch(e) {
-         textContainer.innerHTML = `<span style='color:red; font-weight:bold;'>Ralat Sistem: ${e.message || 'Sila periksa sambungan internet.'}</span>`;
+         paparRalat(`Ralat Sistem: ${e.message || 'Sila periksa sambungan internet.'}`);
+      } finally {
+        generateBtn.disabled = false;
+        generateBtn.textContent = '1. Jana Teks OPR (AI)';
       }
+    }
+
+    function paparRalat(mesej) {
+      const textContainer = document.getElementById('oprText');
+      textContainer.textContent = mesej;
+      textContainer.style.color = '#c53030';
+      textContainer.style.fontWeight = 'bold';
+      kemasKiniKiraan();
     }
 
     loadSettings();

@@ -10,9 +10,9 @@
 
 // Model diuji mengikut urutan. Yang pertama berjaya akan digunakan.
 var MODELS = [
+  // Model bukan penaakulan didahulukan supaya jawapan terus berupa laporan.
   "llama-3.3-70b-versatile",
-  "openai/gpt-oss-120b",
-  "qwen/qwen3-32b"
+  "openai/gpt-oss-120b"
 ];
 
 function doPost(e) {
@@ -75,9 +75,14 @@ function doPost(e) {
             ],
             "temperature": 0.2,
             "top_p": 0.9,
-            "max_completion_tokens": maxTokens,
-            "reasoning_format": "hidden" // Diabaikan oleh model bukan penaakulan
+            "max_completion_tokens": maxTokens
           };
+
+          // Model penaakulan mesti menyembunyikan proses fikir. Jangan hantar
+          // parameter ini kepada model biasa kerana sesetengah model menolaknya.
+          if (MODELS[m].indexOf("gpt-oss") !== -1) {
+            payload.reasoning_format = "hidden";
+          }
 
           var options = {
             "method": "post",
@@ -94,9 +99,15 @@ function doPost(e) {
           var json = JSON.parse(response.getContentText());
 
           if (kod == 200 && json.choices && json.choices.length > 0) {
-            resultText = json.choices[0].message.content || "";
-            modelDigunakan = MODELS[m];
-            success = true;
+            var calon = ambilJawapanAkhir(json.choices[0].message.content || "");
+            calon = hadkanPerkataan(bersihkanBahasa(calon), maxWords);
+            if (kiraPerkataan(calon) >= 20) {
+              resultText = calon;
+              modelDigunakan = MODELS[m];
+              success = true;
+            } else {
+              lastErrorMessage = "Model tidak memulangkan teks laporan akhir yang lengkap.";
+            }
           } else {
             lastErrorMessage = (json.error && json.error.message) ? json.error.message : ("Ralat " + kod + ": " + response.getContentText());
             // Jika parameter reasoning_format tidak disokong, cuba semula tanpa parameter itu
@@ -106,9 +117,15 @@ function doPost(e) {
               var response2 = UrlFetchApp.fetch("https://api.groq.com/openai/v1/chat/completions", options);
               var json2 = JSON.parse(response2.getContentText());
               if (response2.getResponseCode() == 200 && json2.choices && json2.choices.length > 0) {
-                resultText = json2.choices[0].message.content || "";
-                modelDigunakan = MODELS[m];
-                success = true;
+                var calon2 = ambilJawapanAkhir(json2.choices[0].message.content || "");
+                calon2 = hadkanPerkataan(bersihkanBahasa(calon2), maxWords);
+                if (kiraPerkataan(calon2) >= 20) {
+                  resultText = calon2;
+                  modelDigunakan = MODELS[m];
+                  success = true;
+                } else {
+                  lastErrorMessage = "Model tidak memulangkan teks laporan akhir yang lengkap.";
+                }
               }
             }
           }
@@ -123,6 +140,9 @@ function doPost(e) {
     }
 
     var teksBersih = hadkanPerkataan(bersihkanBahasa(resultText), maxWords);
+    if (kiraPerkataan(teksBersih) < 20) {
+      return respond({ success: false, error: "AI tidak menghasilkan laporan lengkap. Sila tekan Jana sekali lagi." });
+    }
 
     return respond({
       success: true,
@@ -135,6 +155,20 @@ function doPost(e) {
   } catch (error) {
     return respond({ success: false, error: error.message });
   }
+}
+
+/** Ambil jawapan akhir dan tolak proses fikir yang tidak lengkap. */
+function ambilJawapanAkhir(teks) {
+  var hasil = String(teks || "").trim();
+  var tutupThink = hasil.toLowerCase().lastIndexOf("</think>");
+  if (tutupThink !== -1) {
+    hasil = hasil.substring(tutupThink + 8).trim();
+  }
+  // Respons terpotong ketika masih berfikir tidak boleh dipaparkan sebagai laporan.
+  if (/<think>/i.test(hasil) || /thinking process|analyze user input|output generation/i.test(hasil)) {
+    return "";
+  }
+  return hasil;
 }
 
 /** Buang blok "berfikir", tanda markdown, mukadimah dan ayat bahasa Inggeris. */
