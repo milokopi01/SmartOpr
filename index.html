@@ -28,19 +28,28 @@
     .btn-group, .upload-group { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
     .upload-group { margin-top: 5px; }
 
-    button { color: white; border: none; font-weight: bold; cursor: pointer; padding: 12px; border-radius: 4px; flex: 1 1 160px; transition: 0.2s; font-size: 14px; min-height: 44px;}
+    button { color: white; border: none; font-weight: bold; cursor: pointer; padding: 12px; border-radius: 12px; flex: 1 1 160px; transition: transform .15s ease, box-shadow .15s ease, filter .15s ease; font-size: 14px; min-height: 46px; letter-spacing: .2px; }
+    button:hover { transform: translateY(-2px); filter: saturate(1.15); }
+    button:active { transform: translateY(0); }
 
-    .btn-primary { background: var(--primary); }
-    .btn-primary:hover { background: #0f2544; }
-    .btn-secondary { background: #4a5568; padding: 10px !important; }
-    .btn-secondary:hover { background: #2d3748; }
-    .btn-print { background: #2f855a; }
-    .btn-print:hover { background: #22543d; }
-    .btn-danger { background: #c53030; }
-    .btn-danger:hover { background: #9b2c2c; }
+    .btn-primary { background: linear-gradient(135deg, #1A365D, #2b6cb0); box-shadow: 0 6px 14px rgba(43,108,176,.35); }
+    .btn-secondary { background: linear-gradient(135deg, #64748b, #475569); box-shadow: 0 4px 10px rgba(71,85,105,.28); padding: 10px !important; }
+    .btn-print { background: linear-gradient(135deg, #34d399, #059669); box-shadow: 0 6px 14px rgba(5,150,105,.35); }
+    .btn-danger { background: linear-gradient(135deg, #fb7185, #e11d48); box-shadow: 0 6px 14px rgba(225,29,48,.32); }
 
-    .btn-icon { background: none; color: var(--primary); padding: 5px; font-size: 20px; flex: none; border-radius: 50%; min-height: auto; }
+    /* Butang utama "Jana" - ceria & menonjol */
+    .btn-jana { background: linear-gradient(135deg, #f59e0b, #f43f5e 55%, #8b5cf6); box-shadow: 0 10px 22px rgba(244,63,94,.35); font-size: 16px; min-height: 54px; border-radius: 14px; flex: 1 1 100%; }
+
+    /* Chip media (gambar / video / laporan) */
+    .btn-chip { background: #fff; color: #1A365D; border: 2px solid #dbe4f0; box-shadow: 0 3px 8px rgba(26,54,93,.08); font-size: 13px; padding: 10px 12px; min-height: 44px; }
+    .btn-chip:hover { background: #f1f6ff; border-color: #93c5fd; }
+    .btn-chip.aktif { background: linear-gradient(135deg,#38bdf8,#6366f1); color: #fff; border-color: transparent; }
+
+    .btn-icon { background: none; color: var(--primary); padding: 5px; font-size: 20px; flex: none; border-radius: 50%; min-height: auto; box-shadow: none; }
     .btn-icon:hover { background: #e2e8f0; color: #0f2544; }
+    .sub-menu { display: none; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+    .sub-menu.active { display: flex; }
+
 
     .settings-panel { display: none; background: #f8fafc; border: 2px solid var(--primary); }
     .settings-panel.active { display: block; }
@@ -235,24 +244,25 @@
     <label>Arahan Laporan (Prompt):</label>
     <textarea id="promptInput" rows="3" placeholder="Contoh: Laporan Program Gotong Royong Perdana. Huraikan objektif, aktiviti dan impak."></textarea>
 
-    <label>Muat Naik Gambar:</label>
+    <div class="btn-group">
+      <button id="generateBtn" onclick="generateOPR()" class="btn-jana">✨ Jana Teks OPR (AI)</button>
+    </div>
+
+    <label>Media Laporan:</label>
     <div class="upload-group">
       <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none">
       <input type="file" id="galleryInput" accept="image/*" multiple style="display:none">
-
-      <button onclick="document.getElementById('cameraInput').click()" class="btn-secondary">📷 Snap Kamera</button>
-      <button onclick="document.getElementById('galleryInput').click()" class="btn-secondary">📁 Pilih Fail</button>
-    </div>
-
-
-    <label>Video Aktiviti (dimuat naik ke Google Drive &amp; dipaparkan sebagai Kod QR):</label>
-    <div class="upload-group">
       <input type="file" id="videoFileInput" accept="video/*" multiple style="display:none">
       <input type="file" id="videoCameraInput" accept="video/*" capture="environment" style="display:none">
-      <button onclick="document.getElementById('videoCameraInput').click()" class="btn-secondary">🎥 Rakam Video (Kamera)</button>
-      <button onclick="mulaRakamanSkrin()" class="btn-secondary">⏺️ Rakam Terus Dalam App</button>
-      <button onclick="document.getElementById('videoFileInput').click()" class="btn-secondary">🎞️ Muat Naik Video</button>
+
+      <button onclick="document.getElementById('galleryInput').click()" class="btn-chip">🖼️ Tambah Gambar</button>
+      <button id="btnMenuVideo" onclick="togolMenuVideo()" class="btn-chip">🎬 Tambah Video</button>
     </div>
+    <div class="sub-menu" id="menuVideo">
+      <button onclick="document.getElementById('videoFileInput').click()" class="btn-chip">🎞️ Pilih / Rakam Video</button>
+      <button onclick="mulaRakamanSkrin()" class="btn-chip">⏺️ Rakam Dalam App</button>
+    </div>
+    <small style="color:#4a5568; display:block; margin-top:6px; font-size:12px;">Video dimuat naik ke Google Drive &amp; dipaparkan sebagai Kod QR.</small>
     <div class="rakam-kotak" id="rakamKotak">
       <video id="rakamPratonton" muted playsinline></video>
       <div class="btn-group">
@@ -264,19 +274,15 @@
     <div class="media-list" id="videoList"></div>
 
     <div class="btn-group">
-      <button onclick="simpanLaporan()" class="btn-secondary">💾 Simpan Laporan (Memori Peranti)</button>
-      <button onclick="bukaSenaraiLaporan()" class="btn-secondary">📂 Buka / Jana Semula Laporan</button>
-    </div>
-
-    <div class="btn-group">
-      <button id="generateBtn" onclick="generateOPR()" class="btn-primary">1. Jana Teks OPR (AI)</button>
-      <button onclick="clearImages()" class="btn-danger">Padam Gambar</button>
-      <button onclick="window.print()" class="btn-print">2. Simpan PDF</button>
+      <button onclick="window.print()" class="btn-print">📄 Simpan PDF</button>
+      <button onclick="simpanLaporan()" class="btn-chip">💾 Simpan</button>
+      <button onclick="bukaSenaraiLaporan()" class="btn-chip">📂 Laporan Tersimpan</button>
     </div>
     <div class="info-kira" id="wordInfo">Jumlah perkataan laporan: 0</div>
     <small style="color:#4a5568; display:block; margin-top:10px; font-size: 12px;">
-      *Tip: Klik ikon ⚙️ untuk tukar nama/logo sekolah. Semua paparan laporan di bawah boleh ditaip/diedit manual sebelum disimpan. Seret gambar untuk mengubah kedudukan. Tekan ✕ pada gambar untuk buang gambar itu sahaja.
+      *Tip: Klik ikon ⚙️ untuk tukar nama/logo sekolah. Semua paparan laporan boleh ditaip/diedit manual. Seret gambar untuk mengubah kedudukan. Tekan ✕ pada gambar untuk buang gambar itu.
     </small>
+
   </div>
 
   <div id="pageWrap">
@@ -859,7 +865,7 @@
     }
 
     async function generateOPR() {
-      const url = "https://script.google.com/macros/s/AKfycbw8lxLXMyiY6LQNwTNMfpbgRBE7H9xtn_tz1NLMG2wLYCB6fp_nztmErBMqnemGF-8/exec";
+      const url = "https://script.google.com/macros/s/AKfycbzDsLkKYQdEQQ5bd5SMSoFxCMcWH5obyqp-uuriXa4jzlJd2Vzxm9j75dk3TwmhctaG/exec";
       const promptAsal = document.getElementById('promptInput').value.trim();
       let maxWords = parseInt(document.getElementById('maxWordsInput').value) || 180;
       maxWords = Math.min(400, Math.max(50, maxWords));
@@ -961,7 +967,7 @@
 
 
     // ================= 6. VIDEO + KOD QR + SIMPANAN PERANTI =================
-    const API_URL = "https://script.google.com/macros/s/AKfycbzlGunNXRuh1KYbR4YMOaO3h3c8iQr6QbWm2D1AM0j9rS_SCxBGbvEPavNsuXetpX1d/exec";
+    const API_URL = "https://script.google.com/macros/s/AKfycbzDsLkKYQdEQQ5bd5SMSoFxCMcWH5obyqp-uuriXa4jzlJd2Vzxm9j75dk3TwmhctaG/exec";
     let videosArray = [];
 
     // ---- Pangkalan data tempatan (IndexedDB) untuk memori komputer & telefon ----
@@ -1046,43 +1052,67 @@
     }
 
     async function muatNaikVideoKeDrive(item, fail) {
-      if (fail.size > 45 * 1024 * 1024) {
-        item.status = 'gagal';
-        item.ralat = 'Video melebihi 45 MB. Sila potong / kecilkan video.';
-        renderVideos();
-        return;
-      }
+      // Muat naik "resumable" terus ke Google Drive — tiada had saiz video.
       item.status = 'naik';
+      item.ralat = '';
+      item.peratus = 0;
       renderVideos();
       try {
-        const base64 = await new Promise((resolve, reject) => {
-          const r = new FileReader();
-          r.onload = () => resolve(String(r.result).split('base64,')[1]);
-          r.onerror = () => reject(new Error('Gagal membaca fail video.'));
-          r.readAsDataURL(fail);
-        });
-        const res = await fetch(API_URL, {
+        const mula = await fetch(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
-            action: 'uploadVideo',
+            action: 'startVideoUpload',
             fileName: item.nama,
-            mimeType: item.jenis,
-            fileData: base64
+            mimeType: item.jenis
           })
         });
-        const hasil = JSON.parse(await res.text());
-        if (hasil.success && hasil.url) {
-          item.status = 'siap';
-          item.url = hasil.url;
-          item.fileId = hasil.fileId;
-        } else {
-          item.status = 'gagal';
-          item.ralat = hasil.error || 'Muat naik ke Google Drive gagal.';
+        const sesi = JSON.parse(await mula.text());
+        if (!sesi.success || !sesi.uploadUrl) throw new Error(sesi.error || 'Gagal memulakan muat naik.');
+
+        const uploadUrl = sesi.uploadUrl;
+        const jumlah = fail.size;
+        const SAIZ_POTONGAN = 8 * 1024 * 1024; // 8 MB setiap potongan
+        let mulaBait = 0;
+        let hasilAkhir = null;
+
+        while (mulaBait < jumlah) {
+          const hujung = Math.min(mulaBait + SAIZ_POTONGAN, jumlah);
+          const potongan = fail.slice(mulaBait, hujung);
+          const r = await fetch(uploadUrl, {
+            method: 'PUT',
+            headers: { 'Content-Range': 'bytes ' + mulaBait + '-' + (hujung - 1) + '/' + jumlah },
+            body: potongan
+          });
+
+          if (r.status === 308) {
+            const julat = r.headers.get('Range');
+            mulaBait = julat ? parseInt(julat.split('-')[1], 10) + 1 : hujung;
+          } else if (r.ok) {
+            hasilAkhir = JSON.parse(await r.text());
+            mulaBait = jumlah;
+          } else {
+            throw new Error('Drive menolak potongan (' + r.status + '): ' + (await r.text()));
+          }
+          item.peratus = Math.round((Math.min(mulaBait, jumlah) / jumlah) * 100);
+          renderVideos();
         }
+
+        if (!hasilAkhir || !hasilAkhir.id) throw new Error('Muat naik selesai tetapi Drive tidak memulangkan ID fail.');
+
+        const siap = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'finishVideoUpload', fileId: hasilAkhir.id })
+        });
+        const pautan = JSON.parse(await siap.text());
+        item.status = 'siap';
+        item.fileId = hasilAkhir.id;
+        item.url = (pautan && pautan.url) || ('https://drive.google.com/file/d/' + hasilAkhir.id + '/view');
+        item.peratus = 100;
       } catch (e) {
         item.status = 'gagal';
-        item.ralat = 'Ralat rangkaian / pelayan: ' + (e.message || e);
+        item.ralat = (e.message || String(e));
       }
       renderVideos();
       simpanVideoSesi();
@@ -1113,7 +1143,7 @@
       videosArray.forEach(v => {
         const baris = document.createElement('div');
         baris.className = 'media-item';
-        const teksStatus = { menunggu: 'Menunggu', naik: 'Memuat naik…', siap: 'Siap (QR)', gagal: 'Gagal' }[v.status] || v.status;
+        const teksStatus = { menunggu: 'Menunggu', naik: 'Memuat naik… ' + (v.peratus || 0) + '%', siap: 'Siap (QR)', gagal: 'Gagal' }[v.status] || v.status;
         baris.innerHTML =
           '<video class="media-thumb" src="' + (v.blobUrl || '') + '" muted></video>' +
           '<span class="nama">' + v.nama + '<br><small style="font-weight:normal;color:#4a5568">' + saizMesra(v.saiz) + (v.ralat ? ' — ' + v.ralat : '') + '</small></span>' +
@@ -1188,6 +1218,13 @@
 
     // ---- Rakaman video terus dalam aplikasi ----
     let mediaRecorder = null, cebisanRakaman = [], strimRakaman = null, pemasaRakam = null;
+
+    function togolMenuVideo() {
+      const m = document.getElementById('menuVideo');
+      const b = document.getElementById('btnMenuVideo');
+      const buka = m.classList.toggle('active');
+      b.classList.toggle('aktif', buka);
+    }
 
     async function mulaRakamanSkrin() {
       const kotak = document.getElementById('rakamKotak');

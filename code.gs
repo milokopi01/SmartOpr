@@ -47,9 +47,7 @@ function muatNaikVideo(data) {
 
     var folder = DriveApp.getFolderById(FOLDER_VIDEO_ID);
     var fail = folder.createFile(blob);
-    try {
-      fail.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    } catch (err) { /* perkongsian mungkin dihadkan oleh domain sekolah */ }
+    kongsiAwam(fail.getId());
 
     return respond({
       success: true,
@@ -62,6 +60,76 @@ function muatNaikVideo(data) {
   }
 }
 
+/**
+ * Mulakan sesi "resumable upload" Google Drive.
+ * Pelayar akan menghantar video terus ke URL yang dipulangkan (potongan demi
+ * potongan), jadi TIADA had saiz daripada Apps Script.
+ */
+function mulaSesiVideo(data) {
+  try {
+    var namaFail = String(data.fileName || ("video_" + new Date().getTime() + ".mp4"));
+    var jenis = String(data.mimeType || "video/mp4");
+
+    var res = UrlFetchApp.fetch(
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true",
+      {
+        method: "post",
+        contentType: "application/json; charset=UTF-8",
+        headers: {
+          Authorization: "Bearer " + ScriptApp.getOAuthToken(),
+          "X-Upload-Content-Type": jenis
+        },
+        payload: JSON.stringify({ name: namaFail, mimeType: jenis, parents: [FOLDER_VIDEO_ID] }),
+        muteHttpExceptions: true
+      }
+    );
+
+    if (res.getResponseCode() >= 300) {
+      return respond({ success: false, error: "Drive menolak permulaan muat naik (" + res.getResponseCode() + "): " + res.getContentText() });
+    }
+
+    var headers = res.getAllHeaders();
+    var uploadUrl = headers["Location"] || headers["location"];
+    if (!uploadUrl) return respond({ success: false, error: "Drive tidak memulangkan URL muat naik." });
+
+    return respond({ success: true, uploadUrl: uploadUrl });
+  } catch (err) {
+    return respond({ success: false, error: "Gagal memulakan sesi muat naik: " + err });
+  }
+}
+
+/** Kongsi fail "sesiapa yang ada pautan" dan pulangkan pautan tontonan. */
+function siapkanVideo(data) {
+  try {
+    var fileId = String(data.fileId || "");
+    if (!fileId) return respond({ success: false, error: "Tiada fileId." });
+    kongsiAwam(fileId);
+    return respond({
+      success: true,
+      fileId: fileId,
+      url: "https://drive.google.com/file/d/" + fileId + "/view"
+    });
+  } catch (err) {
+    return respond({ success: false, error: "Gagal menyiapkan pautan video: " + err });
+  }
+}
+
+function kongsiAwam(fileId) {
+  // Cuba API Drive dahulu (lebih tahan sekatan domain), kemudian DriveApp.
+  try {
+    UrlFetchApp.fetch("https://www.googleapis.com/drive/v3/files/" + fileId + "/permissions?supportsAllDrives=true", {
+      method: "post",
+      contentType: "application/json; charset=UTF-8",
+      headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() },
+      payload: JSON.stringify({ role: "reader", type: "anyone" }),
+      muteHttpExceptions: true
+    });
+  } catch (e) { /* domain sekolah mungkin menghalang perkongsian awam */ }
+  try {
+    DriveApp.getFileById(fileId).setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (e) { /* abaikan */ }
+}
+
 function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
@@ -69,6 +137,12 @@ function doPost(e) {
     // Tindakan muat naik video ke Google Drive
     if (String(data.action || "") === "uploadVideo") {
       return muatNaikVideo(data);
+    }
+    if (String(data.action || "") === "startVideoUpload") {
+      return mulaSesiVideo(data);
+    }
+    if (String(data.action || "") === "finishVideoUpload") {
+      return siapkanVideo(data);
     }
     var prompt = String(data.prompt || "").trim();
 
