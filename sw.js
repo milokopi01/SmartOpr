@@ -1,4 +1,4 @@
-const CACHE_NAME = 'opr-multi-v2';
+const CACHE_NAME = 'opr-multi-v4';
 const urlsToCache = [
   './',
   './index.html',

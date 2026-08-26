@@ -10,6 +10,11 @@
     :root {
       --primary: #1A365D;
       --secondary: #CBD5E0;
+      --ribbon: #1A365D;
+      --ribbon-text: #ffffff;
+      --tint: #f8fafc;
+      --divider: #a0aec0;
+      --split-top: 48%;
     }
     * { -webkit-text-size-adjust: 100%; }
     body { background: #cbd5e1; display: flex; flex-direction: column; align-items: center; font-family: 'Arial', sans-serif; margin: 0; padding: 16px; }
@@ -52,7 +57,7 @@
       padding: 12mm 15mm; box-sizing: border-box; display: flex; flex-direction: column;
     }
 
-    .top-half { height: 48%; display: flex; flex-direction: column; overflow: hidden; padding-bottom: 3mm; }
+    .top-half { height: var(--split-top); display: flex; flex-direction: column; overflow: hidden; padding-bottom: 3mm; }
 
     .header { display: flex; align-items: center; border-bottom: 3px double var(--primary); padding-bottom: 6px; margin-bottom: 8px; }
     .header img { height: 65px; width: auto; object-fit: contain; margin-right: 15px; }
@@ -65,14 +70,29 @@
     .school-info p { font-size: 9pt; margin: 2px 0; font-weight: bold; }
     .school-info .contact { font-size: 8pt; font-weight: normal; color: #444; }
 
-    .report-title-bar { background: var(--primary); color: white; display: flex; justify-content: space-between; align-items: center; padding: 4px 10px; border-radius: 3px; margin-bottom: 10px; gap: 8px; }
+    .report-title-bar { background: var(--ribbon); color: var(--ribbon-text); display: flex; justify-content: space-between; align-items: center; padding: 4px 10px; border-radius: 3px; margin-bottom: 10px; gap: 8px; }
     .report-title-bar h3 { margin: 0; font-size: 11pt; letter-spacing: 1px; }
     .report-title-bar span { font-size: 9pt; font-weight: bold; }
-    .report-title-bar [contenteditable="true"]:hover, .report-title-bar [contenteditable="true"]:focus { background: rgba(255,255,255,0.2); border-color: white; }
+    .report-title-bar [contenteditable="true"]:hover, .report-title-bar [contenteditable="true"]:focus { background: rgba(255,255,255,0.2); border-color: currentColor; }
 
     .text-content { flex: 1; font-size: 10.5pt; line-height: 1.6; text-align: justify; overflow-y: auto; padding: 5px; }
 
-    .bottom-half { height: 52%; border-top: 2px dashed #a0aec0; padding-top: 4mm; display: grid; gap: 4mm; }
+    .bottom-half { flex: 1; min-height: 0; border-top: 2px dashed var(--divider); padding-top: 4mm; display: grid; gap: 4mm; }
+
+    /* Pembahagi boleh dilaras (seret) */
+    .split-handle { height: 0; position: relative; }
+    .split-bar {
+      position: absolute; left: -6mm; right: -6mm; top: -7px; height: 14px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: row-resize; touch-action: none; z-index: 20;
+    }
+    .split-bar::before { content: ''; position: absolute; left: 0; right: 0; height: 14px; }
+    .split-grip {
+      background: var(--primary); color: #fff; font-size: 9px; font-weight: bold;
+      padding: 1px 10px; border-radius: 10px; letter-spacing: 1px; opacity: 0.25; transition: 0.2s;
+      user-select: none;
+    }
+    .split-bar:hover .split-grip, .split-bar.dragging .split-grip { opacity: 1; }
 
     .grid-1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
     .grid-2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
@@ -80,7 +100,7 @@
     .grid-5, .grid-6 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; }
     .grid-many { grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; }
 
-    .img-wrapper { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 4px; border: 1px solid #cbd5e1; background: #f8fafc; }
+    .img-wrapper { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 4px; border: 1px solid var(--divider); background: var(--tint); }
     .img-container { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; cursor: grab; touch-action: none; }
     .img-container:active { cursor: grabbing; }
     .img-container img { min-width: 100%; min-height: 100%; object-fit: cover; }
@@ -95,7 +115,17 @@
       .btn-group button, .upload-group button { flex: 1 1 100%; }
     }
 
+    /* Dropdown templet */
+    .tpl-select-wrap { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+    .tpl-swatch { width: 46px; height: 26px; border-radius: 5px; border: 1px solid #cbd5e0; flex-shrink: 0; }
+    .tpl-select-wrap select { flex: 1; margin-top: 0; cursor: pointer; }
+    .range-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+    .range-row input[type=range] { flex: 1; }
+    .range-row b { color: var(--primary); font-size: 13px; min-width: 42px; text-align: right; }
+
     @media print {
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      .split-bar { display: none !important; }
       body { padding: 0; background: white; }
       .controls, .settings-panel { display: none; }
       #pageScaler { transform: none !important; }
@@ -130,6 +160,26 @@
         <span style="font-size:12px; color:gray;">Pratonton Logo:</span><br>
         <img id="setLogoPreview" class="logo-preview-small" src="logo.png" onerror="this.src='https://via.placeholder.com/50?text=LOGO'">
     </div>
+
+    <label style="margin-top:18px;">🎨 Templet Reka Bentuk Laporan (10 pilihan):</label>
+    <div class="tpl-select-wrap">
+      <div class="tpl-swatch" id="tplSwatch"></div>
+      <select id="tplSelect" onchange="applyTemplate(parseInt(this.value, 10), true)"></select>
+    </div>
+    <small style="color:#4a5568; display:block; margin-top:8px; font-size:12px;">
+      *Templet boleh ditukar pada bila-bila masa, termasuk selepas laporan dijana. Teks & gambar anda tidak akan hilang.
+    </small>
+
+    <label style="margin-top:18px;">📐 Pembahagi Ruangan Teks / Gambar:</label>
+    <div class="range-row">
+      <span style="font-size:12px; color:gray;">Gambar besar</span>
+      <input type="range" id="splitRange" min="20" max="75" step="1" value="48">
+      <span style="font-size:12px; color:gray;">Teks besar</span>
+      <b id="splitValue">48%</b>
+    </div>
+    <small style="color:#4a5568; display:block; margin-top:5px; font-size:12px;">
+      *Anda juga boleh seret terus garisan pembahagi di tengah laporan di bawah.
+    </small>
 
     <div class="btn-group">
       <button onclick="saveSettings()" class="btn-print">💾 Simpan Tetapan (Tersimpan di Telefon)</button>
@@ -197,6 +247,12 @@
           </div>
         </div>
 
+        <div class="split-handle">
+          <div class="split-bar" id="splitBar" title="Seret ke atas / bawah untuk melaras pembahagi">
+            <span class="split-grip">⇕ SERET UNTUK LARAS</span>
+          </div>
+        </div>
+
         <div class="bottom-half grid-1" id="imageCollage">
           <div style="color: #a0aec0; text-align:center; align-self:center; grid-column: 1 / -1; font-weight: bold;">
             [ Ruangan Gambar Aktiviti Akan Disusun Secara Automatik Di Sini ]
@@ -214,6 +270,102 @@
         contact: "NO TEL : 01110661077 | EMEL: KBB1008@GMAIL.COM",
         logo: "logo.png"
     };
+
+    // --- 1b. TEMPLET REKA BENTUK (10 PILIHAN) ---
+    const TEMPLATES = [
+      { nama: "Biru Rasmi",        primary: "#1A365D", ribbon: "#1A365D", ribbonText: "#ffffff", tint: "#f5f8fc", divider: "#a0aec0" },
+      { nama: "Hijau Zamrud",      primary: "#1B5E3A", ribbon: "linear-gradient(90deg,#1B5E3A,#2f8f5b)", ribbonText: "#ffffff", tint: "#f3faf5", divider: "#9ec7ae" },
+      { nama: "Merah Marun",       primary: "#7B1E28", ribbon: "linear-gradient(90deg,#7B1E28,#a8353f)", ribbonText: "#ffffff", tint: "#fdf5f5", divider: "#d3a3a7" },
+      { nama: "Ungu Diraja",       primary: "#4A2A7A", ribbon: "linear-gradient(90deg,#4A2A7A,#7248b8)", ribbonText: "#ffffff", tint: "#f8f5fd", divider: "#b8a6d6" },
+      { nama: "Jingga Tenaga",     primary: "#B4531A", ribbon: "linear-gradient(90deg,#B4531A,#e08b3c)", ribbonText: "#ffffff", tint: "#fff8f2", divider: "#e0b48c" },
+      { nama: "Teal Moden",        primary: "#0F5A63", ribbon: "linear-gradient(90deg,#0F5A63,#2a9aa5)", ribbonText: "#ffffff", tint: "#f2fafb", divider: "#9cc9ce" },
+      { nama: "Kelabu Profesional",primary: "#2D3748", ribbon: "#2D3748", ribbonText: "#ffffff", tint: "#f7f8fa", divider: "#b4bcc8" },
+      { nama: "Emas Klasik",       primary: "#6B4E0F", ribbon: "linear-gradient(90deg,#C9A84C,#f0d78c)", ribbonText: "#3B2F0B", tint: "#fdfaf0", divider: "#d8c48a" },
+      { nama: "Merah Jambu Kemas", primary: "#9B3760", ribbon: "linear-gradient(90deg,#9B3760,#cf6a92)", ribbonText: "#ffffff", tint: "#fdf5f8", divider: "#dcaec1" },
+      { nama: "Hitam Minimalis",   primary: "#111827", ribbon: "#111827", ribbonText: "#ffffff", tint: "#f6f6f7", divider: "#9ca3af" }
+    ];
+
+    let templetSemasa = 0;
+    let splitSemasa = 48;
+
+    function applyTemplate(index, simpan) {
+      if (index < 0 || index >= TEMPLATES.length) index = 0;
+      templetSemasa = index;
+      const t = TEMPLATES[index];
+      const r = document.documentElement.style;
+      r.setProperty('--primary', t.primary);
+      r.setProperty('--ribbon', t.ribbon);
+      r.setProperty('--ribbon-text', t.ribbonText);
+      r.setProperty('--tint', t.tint);
+      r.setProperty('--divider', t.divider);
+      renderTemplateGrid();
+      if (simpan) simpanPaparan();
+    }
+
+    function renderTemplateGrid() {
+      const select = document.getElementById('tplSelect');
+      const swatch = document.getElementById('tplSwatch');
+      if (!select) return;
+      select.innerHTML = TEMPLATES.map(function (t, i) {
+        return `<option value="${i}">${i + 1}. ${t.nama}</option>`;
+      }).join('');
+      select.value = String(templetSemasa);
+      if (swatch) swatch.style.background = TEMPLATES[templetSemasa].ribbon;
+    }
+
+    function applySplit(nilai, simpan) {
+      nilai = Math.min(75, Math.max(20, Math.round(nilai)));
+      splitSemasa = nilai;
+      document.documentElement.style.setProperty('--split-top', nilai + '%');
+      const range = document.getElementById('splitRange');
+      const label = document.getElementById('splitValue');
+      if (range) range.value = nilai;
+      if (label) label.innerText = nilai + '%';
+      if (simpan) simpanPaparan();
+    }
+
+    function simpanPaparan() {
+      localStorage.setItem('oprPaparan', JSON.stringify({ templet: templetSemasa, split: splitSemasa }));
+    }
+
+    function loadPaparan() {
+      let data = {};
+      try { data = JSON.parse(localStorage.getItem('oprPaparan') || '{}'); } catch (e) { data = {}; }
+      applyTemplate(typeof data.templet === 'number' ? data.templet : 0, false);
+      applySplit(typeof data.split === 'number' ? data.split : 48, false);
+    }
+
+    // Seret pembahagi di tengah laporan
+    function initSplitDrag() {
+      const bar = document.getElementById('splitBar');
+      const page = document.querySelector('.a4-page');
+      if (!bar || !page) return;
+      let seret = false;
+
+      function kira(clientY) {
+        const kotak = page.getBoundingClientRect();
+        const paddingAtas = kotak.height * 0.04;
+        const guna = kotak.height - (paddingAtas * 2);
+        const peratus = ((clientY - kotak.top - paddingAtas) / guna) * 100;
+        applySplit(peratus, false);
+      }
+
+      function mula(e) { seret = true; bar.classList.add('dragging'); e.preventDefault(); }
+      function gerak(e) {
+        if (!seret) return;
+        const y = e.touches ? e.touches[0].clientY : e.clientY;
+        kira(y);
+        e.preventDefault();
+      }
+      function tamat() { if (!seret) return; seret = false; bar.classList.remove('dragging'); simpanPaparan(); }
+
+      bar.addEventListener('mousedown', mula);
+      window.addEventListener('mousemove', gerak);
+      window.addEventListener('mouseup', tamat);
+      bar.addEventListener('touchstart', mula, { passive: false });
+      window.addEventListener('touchmove', gerak, { passive: false });
+      window.addEventListener('touchend', tamat);
+    }
 
     function toggleSettings() {
         document.getElementById('settingsPanel').classList.toggle('active');
@@ -248,6 +400,9 @@
             document.getElementById('setSchoolContact').value = defaultSettings.contact;
             document.getElementById('setLogoPreview').src = defaultSettings.logo;
             applySettings(defaultSettings);
+            localStorage.removeItem('oprPaparan');
+            applyTemplate(0, false);
+            applySplit(48, false);
             toggleSettings();
         }
     }
@@ -531,7 +686,7 @@
 
     // --- 5. PANGGILAN API (JANA TEKS OPR) ---
     async function generateOPR() {
-      const url = "https://script.google.com/macros/s/AKfycbx56PgNm38KBUFlUqCsEayDlcjEzP4nBkZ32Tp_eLMxtvT0EkKf-24xx_XFkLPpzSH8/exec";
+      const url = "https://script.google.com/macros/s/AKfycbzDsLkKYQdEQQ5bd5SMSoFxCMcWH5obyqp-uuriXa4jzlJd2Vzxm9j75dk3TwmhctaG/exec";
       const promptAsal = document.getElementById('promptInput').value.trim();
       let maxWords = parseInt(document.getElementById('maxWordsInput').value) || 180;
       maxWords = Math.min(400, Math.max(50, maxWords));
@@ -570,18 +725,35 @@
           headers: { 'Content-Type': 'text/plain;charset=utf-8' }
         });
 
-        const result = await response.json();
+        const mentah = await response.text();
+        let result;
+        try {
+          result = JSON.parse(mentah);
+        } catch (err) {
+          let sebab = 'Pelayan tidak membalas data JSON.';
+          if (mentah.indexOf('Script function not found') !== -1) {
+            sebab = 'Deployment Apps Script masih versi lama (doPost tidak dijumpai). Buka Apps Script > Deploy > Manage deployments > Edit > Version: New version > Deploy.';
+          } else if (mentah.indexOf('accounts.google.com') !== -1 || mentah.indexOf('Sign in') !== -1) {
+            sebab = 'Deployment tidak dibuka kepada umum. Tetapkan Who has access: Anyone.';
+          }
+          textContainer.innerHTML = `<span style='color:red; font-weight:bold;'>Ralat Backend: ${sebab}</span>`;
+          return;
+        }
+
         if(result.success) {
           paparTeks(result.text || '', maxWords);
         } else {
           textContainer.innerHTML = `<span style='color:red; font-weight:bold;'>${result.error || 'Ralat menjana laporan.'}</span>`;
         }
       } catch(e) {
-         textContainer.innerHTML = `<span style='color:red; font-weight:bold;'>Ralat Sistem: Sila periksa sambungan internet.</span>`;
+         textContainer.innerHTML = `<span style='color:red; font-weight:bold;'>Ralat Sistem: ${e.message || 'Sila periksa sambungan internet.'}</span>`;
       }
     }
 
     loadSettings();
+    loadPaparan();
+    initSplitDrag();
+    document.getElementById('splitRange').addEventListener('input', function () { applySplit(this.value, true); });
     fitPage();
     window.addEventListener('load', fitPage);
     kemasKiniKiraan();
