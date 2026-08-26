@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Penjana OPR - SK Selama (K)</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    :root {
+      --primary: #1A365D; /* Biru Korporat Gelap */
+      --secondary: #CBD5E0;
+      --accent: #E2E8F0;
+    }
+    body { background: #cbd5e1; display: flex; flex-direction: column; align-items: center; font-family: 'Arial', sans-serif; margin: 0; padding: 20px; }
+    
+    /* Bahagian Kawalan PWA (Sembunyi waktu cetak) */
+    .controls { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; width: 210mm; box-shadow: 0 4px 10px rgba(0,0,0,0.15); box-sizing: border-box; }
+    .controls h3 { margin-top: 0; color: var(--primary); }
+    .controls label { font-weight: bold; display: block; margin-top: 10px; font-size: 14px;}
+    .controls input, .controls textarea { width: 100%; padding: 10px; margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-family: inherit;}
+    
+    .btn-group { display: flex; gap: 10px; margin-top: 15px; }
+    .controls button { color: white; border: none; font-weight: bold; cursor: pointer; padding: 12px; border-radius: 4px; flex: 1; transition: 0.2s;}
+    .btn-primary { background: var(--primary); }
+    .btn-primary:hover { background: #0f2544; }
+    .btn-print { background: #2f855a; }
+    .btn-print:hover { background: #22543d; }
+    .btn-danger { background: #c53030; }
+    .btn-danger:hover { background: #9b2c2c; }
+
+    /* Saiz dan Rupa Kertas A4 */
+    .a4-page { 
+      width: 210mm; height: 297mm; background: white; box-shadow: 0 0 15px rgba(0,0,0,0.2); 
+      padding: 12mm 15mm; box-sizing: border-box; display: flex; flex-direction: column; 
+    }
+    
+    /* Separuh Atas (Header & Teks) */
+    .top-half { height: 48%; display: flex; flex-direction: column; overflow: hidden; padding-bottom: 3mm; }
+    
+    /* Rekaan Header "Kop Surat" Kompak & Gempak */
+    .header { display: flex; align-items: center; border-bottom: 3px double var(--primary); padding-bottom: 6px; margin-bottom: 8px; }
+    .header img { height: 65px; width: auto; object-fit: contain; margin-right: 15px; }
+    .school-info { flex: 1; text-align: center; color: var(--primary); }
+    .school-info h2 { font-size: 15pt; margin: 0; font-weight: 900; letter-spacing: 0.5px; }
+    .school-info p { font-size: 9pt; margin: 2px 0; font-weight: bold; }
+    .school-info .contact { font-size: 8pt; font-weight: normal; color: #444; }
+
+    /* Ribbon Tajuk OPR */
+    .report-title-bar { background: var(--primary); color: white; display: flex; justify-content: space-between; align-items: center; padding: 4px 10px; border-radius: 3px; margin-bottom: 10px; }
+    .report-title-bar h3 { margin: 0; font-size: 11pt; letter-spacing: 1px; }
+    .report-title-bar span { font-size: 9pt; font-weight: bold; }
+
+    /* Ruangan Teks Laporan */
+    .text-content { flex: 1; font-size: 10.5pt; line-height: 1.5; text-align: justify; white-space: pre-wrap; overflow-y: hidden; }
+
+    /* Separuh Bawah (Gambar Collage) */
+    .bottom-half { height: 52%; border-top: 2px dashed #a0aec0; padding-top: 4mm; display: grid; gap: 4mm; }
+    
+    /* Logik CSS Grid Collage Auto-Susun */
+    .grid-1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+    .grid-2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
+    .grid-3, .grid-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+    .grid-5, .grid-6 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; }
+    .grid-many { grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; }
+
+    /* Wrapper untuk Gambar (Kawal Zoom & Pan) */
+    .img-wrapper { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 4px; border: 1px solid #cbd5e1; background: #f8fafc; }
+    .img-container { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; cursor: grab; }
+    .img-container:active { cursor: grabbing; }
+    .img-container img { min-width: 100%; min-height: 100%; object-fit: cover; }
+    
+    /* Butang Zoom Manual */
+    .zoom-controls { position: absolute; bottom: 5px; right: 5px; display: flex; gap: 5px; z-index: 10; }
+    .zoom-controls button { width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(0,0,0,0.65); color: white; font-weight: bold; cursor: pointer; font-size: 16px; padding: 0; }
+    .zoom-controls button:hover { background: rgba(0,0,0,0.9); }
+
+    /* Cetakan (Print / PDF) */
+    @media print {
+      body { padding: 0; background: white; }
+      .controls { display: none; }
+      .a4-page { box-shadow: none; margin: 0; padding: 10mm 15mm; page-break-after: avoid; }
+      .zoom-controls { display: none !important; }
+      @page { size: A4; margin: 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Kawalan PWA -->
+  <div class="controls">
+    <h3>Sistem Penjana OPR Automatik</h3>
+    <label>URL Web App Google Script (API):</label>
+    <input type="text" id="scriptUrl" placeholder="Paste URL Web App Code.gs di sini...">
+    
+    <label>Arahan Laporan (Prompt):</label>
+    <textarea id="promptInput" rows="3" placeholder="Contoh: Laporan Program Gotong Royong Perdana. Huraikan objektif, aktiviti dan impak."></textarea>
+    
+    <label>Muat Naik Gambar (Snap Kamera atau Pilih Fail - Boleh berulang kali):</label>
+    <input type="file" id="imageInput" accept="image/*" multiple>
+    
+    <div class="btn-group">
+      <button onclick="generateOPR()" class="btn-primary">1. Jana Teks OPR</button>
+      <button onclick="clearImages()" class="btn-danger">Padam Gambar</button>
+      <button onclick="window.print()" class="btn-print">2. Cetak / Simpan PDF</button>
+    </div>
+    <small style="color:#4a5568; display:block; margin-top:10px; font-size: 12px;">
+      *Tip: Seret (drag) gambar untuk mengubah kedudukan. Guna butang + / - untuk membesarkan (crop) gambar.
+    </small>
+  </div>
+
+  <!-- Kertas A4 -->
+  <div class="a4-page">
+    <div class="top-half">
+      <!-- HEADER RASMI SK SELAMA (K) -->
+      <div class="header">
+        <img src="Sekolah_Kebangsaan_Selama.jpg" alt="Logo SK Selama">
+        <div class="school-info">
+          <h2>SEKOLAH KEBANGSAAN SELAMA (K)</h2>
+          <p>Jalan Mahang, 09810 Serdang, Kedah Darul Aman</p>
+          <p class="contact">NO TEL : 01110661077 | EMEL: KBB1008@GMAIL.COM</p>
+        </div>
+      </div>
+      
+      <!-- RIBBON TAJUK -->
+      <div class="report-title-bar">
+        <h3>ONE PAGE REPORT (OPR)</h3>
+        <span id="tarikhSemasa"></span>
+      </div>
+
+      <!-- TEKS OPR -->
+      <div class="text-content" id="oprText">
+        <em>Teks laporan rasmi akan dijana dan dipaparkan di sini...</em>
+      </div>
+    </div>
+    
+    <!-- RUANGAN GAMBAR -->
+    <div class="bottom-half grid-1" id="imageCollage">
+      <div style="color: #a0aec0; text-align:center; align-self:center; grid-column: 1 / -1; font-weight: bold;">
+        [ Ruangan Gambar Aktiviti Akan Disusun Secara Automatik Di Sini ]
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Format Tarikh Semasa
+    const today = new Date();
+    const options = { day: '2-digit', month: 'short', year: 'numeric' };
+    document.getElementById('tarikhSemasa').innerText = "TARIKH: " + today.toLocaleDateString('ms-MY', options).toUpperCase();
+
+    // Pengurusan Gambar (Array)
+    let imagesArray = [];
+
+    document.getElementById('imageInput').addEventListener('change', function() {
+      const files = Array.from(this.files);
+      if(files.length === 0) return;
+      
+      files.forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          imagesArray.push({
+            src: e.target.result,
+            scale: 1,
+            translateX: 0,
+            translateY: 0
+          });
+          renderCollage();
+        }
+        reader.readAsDataURL(file);
+      });
+      this.value = ''; // Reset input supaya boleh snap gambar lagi
+    });
+
+    function clearImages() {
+      imagesArray = [];
+      renderCollage();
+    }
+
+    function renderCollage() {
+      const collage = document.getElementById('imageCollage');
+      collage.innerHTML = '';
+      
+      if(imagesArray.length === 0) {
+        collage.className = 'bottom-half grid-1';
+        collage.innerHTML = '<div style="color: #a0aec0; text-align:center; align-self:center; grid-column: 1 / -1; font-weight: bold;">[ Ruangan Gambar Aktiviti Akan Disusun Secara Automatik Di Sini ]</div>';
+        return;
+      }
+
+      let gridClass = 'grid-1';
+      if(imagesArray.length === 2) gridClass = 'grid-2';
+      else if(imagesArray.length <= 4) gridClass = 'grid-4';
+      else if(imagesArray.length <= 6) gridClass = 'grid-6';
+      else gridClass = 'grid-many';
+
+      collage.className = `bottom-half ${gridClass}`;
+
+      imagesArray.forEach((imgData) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'img-wrapper';
+
+        const imgContainer = document.createElement('div');
+        imgContainer.className = 'img-container';
+        
+        const img = document.createElement('img');
+        img.src = imgData.src;
+        img.style.transform = `translate(${imgData.translateX}px, ${imgData.translateY}px) scale(${imgData.scale})`;
+        
+        // Butang Zoom
+        const controls = document.createElement('div');
+        controls.className = 'zoom-controls';
+        
+        const btnIn = document.createElement('button');
+        btnIn.innerText = '+';
+        btnIn.onclick = () => { imgData.scale += 0.15; updateTransform(img, imgData); };
+        
+        const btnOut = document.createElement('button');
+        btnOut.innerText = '-';
+        btnOut.onclick = () => { imgData.scale = Math.max(0.5, imgData.scale - 0.15); updateTransform(img, imgData); };
+
+        controls.appendChild(btnIn);
+        controls.appendChild(btnOut);
+
+        imgContainer.appendChild(img);
+        wrapper.appendChild(imgContainer);
+        wrapper.appendChild(controls);
+        collage.appendChild(wrapper);
+
+        // Fungsi Drag & Pan
+        let isDragging = false;
+        let startX, startY;
+
+        imgContainer.addEventListener('mousedown', dragStart);
+        imgContainer.addEventListener('touchstart', dragStart, {passive: false});
+
+        function dragStart(e) {
+          e.preventDefault();
+          isDragging = true;
+          startX = e.type.includes('mouse') ? e.pageX : e.touches[0].pageX;
+          startY = e.type.includes('mouse') ? e.pageY : e.touches[0].pageY;
+        }
+
+        document.addEventListener('mousemove', dragMove);
+        document.addEventListener('touchmove', dragMove, {passive: false});
+
+        function dragMove(e) {
+          if (!isDragging) return;
+          e.preventDefault();
+          let currentX = e.type.includes('mouse') ? e.pageX : e.touches[0].pageX;
+          let currentY = e.type.includes('mouse') ? e.pageY : e.touches[0].pageY;
+          
+          let dx = currentX - startX;
+          let dy = currentY - startY;
+          
+          imgData.translateX += dx;
+          imgData.translateY += dy;
+          
+          updateTransform(img, imgData);
+          
+          startX = currentX;
+          startY = currentY;
+        }
+
+        document.addEventListener('mouseup', dragEnd);
+        document.addEventListener('touchend', dragEnd);
+
+        function dragEnd() { isDragging = false; }
+      });
+    }
+
+    function updateTransform(imgElement, imgData) {
+      imgElement.style.transform = `translate(${imgData.translateX}px, ${imgData.translateY}px) scale(${imgData.scale})`;
+    }
+
+    // Panggil API Groq melalui Google Apps Script
+    async function generateOPR() {
+      const url = document.getElementById('scriptUrl').value;
+      const prompt = document.getElementById('promptInput').value;
+      const textContainer = document.getElementById('oprText');
+
+      if(!url || !prompt) {
+        alert('Sila masukkan URL Web App dan Arahan Laporan.');
+        return;
+      }
+
+      textContainer.innerHTML = "<i style='color: var(--primary)'>Memproses AI (Mencari API Key yang aktif)... Sila tunggu.</i>";
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          body: JSON.stringify({ prompt: prompt }), 
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+        });
+
+        const result = await response.json();
+        if(result.success) {
+          // Gantikan baris baru dengan tag <br> untuk paparan perenggan yang betul
+          textContainer.innerHTML = result.text.replace(/\n/g, '<br>');
+        } else {
+          textContainer.innerHTML = `<span style='color:red; font-weight:bold;'>Ralat API: ${result.error}</span>`;
+        }
+      } catch(e) {
+         textContainer.innerHTML = `<span style='color:red; font-weight:bold;'>Ralat Rangkaian: Sila pastikan URL Web App Google Script anda betul.</span>`;
+      }
+    }
+
+    // PWA Service Worker Registration
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').then(function(reg) {
+        console.log('SW Registered');
+      });
+    }
+  </script>
+</body>
+</html>
