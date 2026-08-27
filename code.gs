@@ -28,7 +28,7 @@ var MODELS = [
 // Bilangan percubaan maksimum keseluruhan (elak kuota terbakar)
 var MAX_PERCUBAAN = 6;
 
-var VERSI_SKRIP = "7.0-video-chunk";
+var VERSI_SKRIP = "8.0-diagnostik";
 
 // ID folder Google Drive khas untuk simpanan video aktiviti
 var FOLDER_VIDEO_ID = "1l1RNAGy9jyVnFkxDvk9UMt4cTdqcDW_c";
@@ -195,6 +195,11 @@ function doPost(e) {
     if (String(data.action || "") === "ping") {
       return respond({ success: true, version: VERSI_SKRIP, videoSupport: true });
     }
+    var tindakan = String(data.action || "");
+    if (tindakan && tindakan !== "generate") {
+      return respond({ success: false, error: "Tindakan tidak dikenali: " + tindakan + " (versi skrip " + VERSI_SKRIP + ")" });
+    }
+
     var prompt = String(data.prompt || "").trim();
 
     if (!prompt) {
@@ -530,7 +535,14 @@ function respond(responseObject) {
 }
 
 function doGet(e) {
-  return respond({ success: true, text: "Perkhidmatan penjana OPR sedia digunakan." });
+  // Digunakan oleh aplikasi untuk MENYEMAK versi sebenar skrip yang di-deploy.
+  return respond({
+    success: true,
+    version: VERSI_SKRIP,
+    videoSupport: true,
+    actions: ["uploadVideo", "startVideoUpload", "putVideoChunk", "finishVideoUpload", "ping"],
+    text: "Perkhidmatan penjana OPR sedia digunakan."
+  });
 }
 
 function doOptions(e) {

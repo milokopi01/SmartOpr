@@ -314,25 +314,55 @@
       return { tambah: tambah, ralat: function (m, b) { return tambah('ralat', m, b); }, info: function (m, b) { return tambah('info', m, b); }, salin: salin, kongsi: kongsi, togol: togol, kosong: function () { senarai = []; lukis(); }, teks: teksPenuh };
     })();
 
+    /* Semak versi sebenar skrip Apps Script yang sedang di-deploy (GET, tiada preflight) */
+    var SKRIP_INFO = null;
+    async function semakSkrip(paksa) {
+      if (SKRIP_INFO && !paksa) return SKRIP_INFO;
+      try {
+        const r = await fetch(API_URL + '?action=ping&t=' + Date.now(), { method: 'GET' });
+        const t = await r.text();
+        SKRIP_INFO = JSON.parse(t);
+      } catch (e) {
+        SKRIP_INFO = { success: false, error: String((e && e.message) || e) };
+      }
+      return SKRIP_INFO;
+    }
+
     /* Terjemah ralat rangkaian kepada bahasa mudah difahami */
     function huraiRalatRangkaian(e, konteks) {
       var m = (e && e.message) ? e.message : String(e);
-      // Ralat khas: Apps Script yang di-deploy masih versi LAMA (tiada sokongan video),
-      // jadi permintaan video jatuh ke laluan penjana laporan (Groq) dan Groq membalas
-      // "messages.1.content : property 'content' is missing".
+      // JANGAN lagi menuduh "versi lama" secara membuta tuli. Kita hanya melaporkan
+      // apa yang benar-benar berlaku, dan versi skrip sebenar disemak melalui ping.
       if (/messages\.\d+\.content|property 'content' is missing|role:user/i.test(m)) {
-        return konteks + ': Skrip Google Apps Script yang sedang digunakan masih VERSI LAMA — ' +
-          'ia tidak mengenali arahan muat naik video, lalu menghantarnya ke penjana laporan (Groq). ' +
-          'Penyelesaian: buka projek Apps Script → salin semula fail code.gs terbaru → Deploy → ' +
-          '"Manage deployments" → Edit → Version: New version → Deploy. Pastikan akses "Anyone".';
+        var v = (SKRIP_INFO && SKRIP_INFO.version) ? SKRIP_INFO.version : 'tidak diketahui';
+        return konteks + ': Permintaan video telah jatuh ke laluan penjana teks (Groq). ' +
+          'Versi skrip yang membalas: ' + v + '. Jika versi ini sudah terkini, punca biasa ialah ' +
+          'aplikasi lama masih tersimpan dalam cache pelayar (PWA) — tekan "Kemas Kini Aplikasi" ' +
+          'atau muat semula dengan cache dibuang.';
       }
       if (/Failed to fetch|NetworkError|Load failed|network request failed/i.test(m)) {
-        return konteks + ': Sambungan ke pelayan gagal (Failed to fetch). Sebab biasa — (1) tiada Internet / talian terputus, ' +
-          '(2) alamat Apps Script (API_URL) salah atau deployment lama, (3) deployment tidak ditetapkan "Anyone", ' +
+        return konteks + ': Sambungan ke pelayan gagal (Failed to fetch). Sebab biasa — (1) tiada Internet, ' +
+          '(2) alamat Apps Script (API_URL) salah, (3) deployment tidak ditetapkan "Anyone", ' +
           '(4) muat naik terlalu lama lalu terputus, atau (5) sekatan CORS pelayar.';
       }
       return konteks + ': ' + m;
     }
+
+    /* Buang cache PWA dan muat semula versi terbaru aplikasi */
+    async function kemasKiniAplikasi() {
+      try {
+        if ('caches' in window) {
+          const nama = await caches.keys();
+          await Promise.all(nama.map(n => caches.delete(n)));
+        }
+        if (navigator.serviceWorker) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(r => r.unregister()));
+        }
+      } catch (e) {}
+      location.reload(true);
+    }
+    window.kemasKiniAplikasi = kemasKiniAplikasi;
 
   </script>
 
@@ -1230,6 +1260,11 @@
     }
 
     async function muatNaikVideoKeDrive(item, fail) {
+      // Semak dahulu versi skrip yang benar-benar di-deploy supaya mesej ralat tepat.
+      const info = await semakSkrip(true);
+      if (info && info.success && info.version) {
+        LogRalat.info('Skrip Apps Script aktif: versi ' + info.version + (info.videoSupport ? ' (sokongan video: ADA)' : ' (sokongan video: TIADA)'));
+      }
       // Muat naik "resumable" terus ke Google Drive — tiada had saiz video.
       item.status = 'naik';
       item.ralat = '';
@@ -1726,6 +1761,9 @@
       <button class="btn-salin" onclick="LogRalat.salin()">📋 Salin Ralat</button>
       <button class="btn-chip" onclick="LogRalat.kongsi()">📤 Kongsi</button>
       <button class="btn-secondary" onclick="LogRalat.kosong()">🧹 Kosongkan</button>
+      <button class="btn-secondary" onclick="semakSkrip(true).then(i=>LogRalat.info('Versi skrip aktif: '+(i.version||'tiada')+' • sokongan video: '+(i.videoSupport?'ADA':'TIADA')+' • '+(i.error||'')))">🔍 Semak Versi Skrip</button>
+      <button class="btn-secondary" onclick="kemasKiniAplikasi()">♻️ Kemas Kini Aplikasi</button>
+
       <button class="btn-tutup-ralat" onclick="LogRalat.togol(false)">✖ Tutup</button>
     </footer>
   </div>
