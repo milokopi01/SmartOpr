@@ -28,6 +28,8 @@ var MODELS = [
 // Bilangan percubaan maksimum keseluruhan (elak kuota terbakar)
 var MAX_PERCUBAAN = 6;
 
+var VERSI_SKRIP = "7.0-video-chunk";
+
 // ID folder Google Drive khas untuk simpanan video aktiviti
 var FOLDER_VIDEO_ID = "1l1RNAGy9jyVnFkxDvk9UMt4cTdqcDW_c";
 
@@ -98,6 +100,49 @@ function mulaSesiVideo(data) {
   }
 }
 
+/**
+ * Terima satu potongan video (base64) daripada pelayar dan tolak ke sesi
+ * "resumable upload" Google Drive. Ini mengelak sekatan CORS pada pelayar.
+ */
+function terimaPotonganVideo(data) {
+  try {
+    var uploadUrl = String(data.uploadUrl || "");
+    if (!uploadUrl) return respond({ success: false, error: "Tiada uploadUrl." });
+
+    var b64 = String(data.chunk || "");
+    if (b64.indexOf("base64,") !== -1) b64 = b64.split("base64,")[1];
+    if (!b64) return respond({ success: false, error: "Potongan video kosong." });
+
+    var bait = Utilities.base64Decode(b64);
+    var mula = Number(data.start || 0);
+    var jumlah = Number(data.total || 0);
+    var hujung = mula + bait.length - 1;
+
+    var res = UrlFetchApp.fetch(uploadUrl, {
+      method: "put",
+      contentType: "application/octet-stream",
+      headers: { "Content-Range": "bytes " + mula + "-" + hujung + "/" + jumlah },
+      payload: bait,
+      muteHttpExceptions: true
+    });
+
+    var kod = res.getResponseCode();
+    if (kod === 308) {
+      var julat = res.getAllHeaders()["Range"] || res.getAllHeaders()["range"] || "";
+      var seterusnya = julat ? parseInt(String(julat).split("-")[1], 10) + 1 : hujung + 1;
+      return respond({ success: true, done: false, next: seterusnya });
+    }
+    if (kod === 200 || kod === 201) {
+      var maklumat = {};
+      try { maklumat = JSON.parse(res.getContentText()); } catch (e) {}
+      return respond({ success: true, done: true, fileId: maklumat.id || "" });
+    }
+    return respond({ success: false, error: "Drive menolak potongan (" + kod + "): " + res.getContentText().slice(0, 300) });
+  } catch (err) {
+    return respond({ success: false, error: "Gagal menghantar potongan video: " + err });
+  }
+}
+
 /** Kongsi fail "sesiapa yang ada pautan" dan pulangkan pautan tontonan. */
 function siapkanVideo(data) {
   try {
@@ -144,10 +189,20 @@ function doPost(e) {
     if (String(data.action || "") === "finishVideoUpload") {
       return siapkanVideo(data);
     }
+    if (String(data.action || "") === "putVideoChunk") {
+      return terimaPotonganVideo(data);
+    }
+    if (String(data.action || "") === "ping") {
+      return respond({ success: true, version: VERSI_SKRIP, videoSupport: true });
+    }
     var prompt = String(data.prompt || "").trim();
 
     if (!prompt) {
-      return respond({ success: false, error: "Arahan laporan (prompt) tidak boleh kosong." });
+      return respond({
+        success: false,
+        error: "Arahan laporan (prompt) tidak boleh kosong. Jika ini permintaan video, " +
+               "skrip yang di-deploy mungkin versi lama — sila deploy semula code.gs terbaru."
+      });
     }
 
     var maxWords = parseInt(data.maxWords, 10);

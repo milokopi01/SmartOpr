@@ -317,6 +317,15 @@
     /* Terjemah ralat rangkaian kepada bahasa mudah difahami */
     function huraiRalatRangkaian(e, konteks) {
       var m = (e && e.message) ? e.message : String(e);
+      // Ralat khas: Apps Script yang di-deploy masih versi LAMA (tiada sokongan video),
+      // jadi permintaan video jatuh ke laluan penjana laporan (Groq) dan Groq membalas
+      // "messages.1.content : property 'content' is missing".
+      if (/messages\.\d+\.content|property 'content' is missing|role:user/i.test(m)) {
+        return konteks + ': Skrip Google Apps Script yang sedang digunakan masih VERSI LAMA — ' +
+          'ia tidak mengenali arahan muat naik video, lalu menghantarnya ke penjana laporan (Groq). ' +
+          'Penyelesaian: buka projek Apps Script → salin semula fail code.gs terbaru → Deploy → ' +
+          '"Manage deployments" → Edit → Version: New version → Deploy. Pastikan akses "Anyone".';
+      }
       if (/Failed to fetch|NetworkError|Load failed|network request failed/i.test(m)) {
         return konteks + ': Sambungan ke pelayan gagal (Failed to fetch). Sebab biasa — (1) tiada Internet / talian terputus, ' +
           '(2) alamat Apps Script (API_URL) salah atau deployment lama, (3) deployment tidak ditetapkan "Anyone", ' +
@@ -324,6 +333,7 @@
       }
       return konteks + ': ' + m;
     }
+
   </script>
 
 </head>
@@ -1282,10 +1292,15 @@
       } catch (e) {
         const pesan = huraiRalatRangkaian(e, 'Muat naik video "' + item.nama + '"');
         LogRalat.ralat(pesan, 'Saiz: ' + saizMesra(item.saiz) + ' • Jenis: ' + item.jenis);
-        // Cuba cara sandaran (hantar terus melalui Apps Script) untuk fail bersaiz kecil
+
+        // Cara 2: muat naik berpotongan MELALUI Apps Script (tiada had saiz, tiada CORS).
+        LogRalat.info('Mencuba cara 2: muat naik berpotongan melalui Apps Script...');
+        if (await muatNaikVideoRelay(item, fail)) { renderVideos(); simpanVideoSesi(); return; }
+
+        // Cara 3: hantar keseluruhan fail sebagai base64 (hanya fail kecil).
         const bolehSandaran = fail && fail.size && fail.size <= 25 * 1024 * 1024;
         if (bolehSandaran) {
-          LogRalat.info('Mencuba cara sandaran (muat naik terus melalui Apps Script)...');
+          LogRalat.info('Mencuba cara 3: hantar keseluruhan fail melalui Apps Script...');
           const berjaya = await muatNaikVideoSandaran(item, fail);
           if (berjaya) { renderVideos(); simpanVideoSesi(); return; }
         }
@@ -1294,6 +1309,93 @@
       }
       renderVideos();
       simpanVideoSesi();
+    }
+
+    /* Cara 2: potongan video dihantar ke Apps Script (base64), dan Apps Script pula
+       yang menolaknya ke Google Drive. Ini mengelak sepenuhnya sekatan CORS pelayar
+       dan tiada had saiz kerana fail dipecahkan kepada potongan kecil. */
+    async function bacaPotonganB64(potongan) {
+      return new Promise((selesai, gagal) => {
+        const r = new FileReader();
+        r.onload = () => {
+          const hasil = String(r.result);
+          const i = hasil.indexOf('base64,');
+          selesai(i === -1 ? hasil : hasil.slice(i + 7));
+        };
+        r.onerror = () => gagal(new Error('Gagal membaca potongan fail daripada peranti.'));
+        r.readAsDataURL(potongan);
+      });
+    }
+
+    async function muatNaikVideoRelay(item, fail) {
+      const SAIZ = 3 * 1024 * 1024; // 3 MB (gandaan 256 KB seperti kehendak Google Drive)
+      try {
+        item.status = 'naik';
+        item.peratus = 0;
+        item.ralat = '';
+        renderVideos();
+
+        const mula = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'startVideoUpload', fileName: item.nama, mimeType: item.jenis })
+        });
+        const sesi = JSON.parse(await mula.text());
+        if (!sesi.success || !sesi.uploadUrl) throw new Error(sesi.error || 'Gagal memulakan sesi muat naik.');
+
+        const jumlah = fail.size;
+        let mulaBait = 0;
+        let fileId = '';
+
+        while (mulaBait < jumlah) {
+          const hujung = Math.min(mulaBait + SAIZ, jumlah);
+          const b64 = await bacaPotonganB64(fail.slice(mulaBait, hujung));
+          const res = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+              action: 'putVideoChunk',
+              uploadUrl: sesi.uploadUrl,
+              start: mulaBait,
+              total: jumlah,
+              chunk: b64
+            })
+          });
+          const mentah = await res.text();
+          let hasil;
+          try { hasil = JSON.parse(mentah); }
+          catch (err) { throw new Error('Pelayan tidak membalas JSON: ' + mentah.slice(0, 160)); }
+          if (!hasil.success) throw new Error(hasil.error || 'Pelayan menolak potongan video.');
+
+          if (hasil.done) { fileId = hasil.fileId; mulaBait = jumlah; }
+          else { mulaBait = (typeof hasil.next === 'number' && hasil.next > mulaBait) ? hasil.next : hujung; }
+
+          item.peratus = Math.round((Math.min(mulaBait, jumlah) / jumlah) * 100);
+          renderVideos();
+        }
+
+        if (!fileId) throw new Error('Muat naik selesai tetapi Drive tidak memulangkan ID fail.');
+
+        const siap = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'finishVideoUpload', fileId: fileId })
+        });
+        let pautan = {};
+        try { pautan = JSON.parse(await siap.text()); } catch (e) {}
+        item.status = 'siap';
+        item.fileId = fileId;
+        item.url = pautan.url || ('https://drive.google.com/file/d/' + fileId + '/view');
+        item.peratus = 100;
+        item.ralat = '';
+        LogRalat.info('Video "' + item.nama + '" berjaya dimuat naik (cara berpotongan).');
+        return true;
+      } catch (e) {
+        const pesan = huraiRalatRangkaian(e, 'Muat naik berpotongan video "' + item.nama + '"');
+        LogRalat.ralat(pesan);
+        item.ralat = pesan;
+        return false;
+      }
     }
 
     /* Sandaran: tukar video kepada base64 dan hantar ke Apps Script (action=uploadVideo).
