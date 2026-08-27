@@ -1352,7 +1352,7 @@
     // ================= 6. VIDEO + KOD QR + SIMPANAN PERANTI =================
     // SATU URL sahaja untuk teks, semakan versi dan video. Jangan guna URL berbeza.
     // Selepas Deploy > New version, URL deployment yang sama boleh dikekalkan.
-    const API_URL = "https://script.google.com/macros/s/AKfycbwn-izUjUhniB6TKcjmyKmYitojyAy2HKg0XsP2RUh2LpHPqbKdjOcHFPysuUaNY6Tk/exec";
+    const API_URL = "https://script.google.com/macros/s/AKfycbwp3WNbhCM2Nx39isbEUCM0R3M-f-a_LF5RGkfrHYrWMwMv1CDZljdQ0h-DGaw85XoI/exec";
     let videosArray = [];
 
     async function ujiMuatNaikDrive() {
@@ -1868,11 +1868,40 @@
 
         if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyediakan PDF...'; }
 
-        const canvas = await html2canvas(page, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        // PENTING: pada telefon, #pageScaler diskalakan-kecil (CSS transform) oleh fitPage()
+        // supaya muat pada skrin. Jika html2canvas menangkap ketika transform ini aktif,
+        // ia menangkap versi kecil lalu direntang semula ke saiz A4 penuh dalam PDF —
+        // punca utama teks kabur/terabur. Jadi neutralkan transform dahulu, tangkap
+        // pada saiz penuh, kemudian pulihkan semula paparan asal.
+        const scaler = document.getElementById('pageScaler');
+        const wrap = document.getElementById('pageWrap');
+        const transformAsal = scaler ? scaler.style.transform : '';
+        const wrapHeightAsal = wrap ? wrap.style.height : '';
+        if (scaler) scaler.style.transform = 'none';
+        if (wrap) wrap.style.height = 'auto';
+        // Beri masa untuk browser reflow selepas transform dibuang
+        await new Promise(r => setTimeout(r, 50));
+
+        let canvas;
+        try {
+          canvas = await html2canvas(page, {
+            scale: Math.max(3, window.devicePixelRatio || 1),
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            windowWidth: page.scrollWidth,
+            windowHeight: page.scrollHeight
+          });
+        } finally {
+          // Pulihkan paparan asal (skala telefon) selepas tangkapan selesai
+          if (scaler) scaler.style.transform = transformAsal;
+          if (wrap) wrap.style.height = wrapHeightAsal;
+        }
+
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-        pdf.addImage(dataUrl, 'JPEG', 0, 0, 210, 297);
+        // Guna PNG (bukan JPEG) supaya tepi huruf kekal tajam - JPEG mengaburkan teks
+        const dataUrl = canvas.toDataURL('image/png');
+        pdf.addImage(dataUrl, 'PNG', 0, 0, 210, 297);
 
         const tajuk = (document.querySelector('.report-title-bar h3').innerText || 'Laporan OPR').trim();
         const namaFail = 'OPR_' + tajuk.replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 40) + '_' + Utilities_tarikhFail() + '.pdf';
