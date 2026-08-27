@@ -28,10 +28,46 @@ var MODELS = [
 // Bilangan percubaan maksimum keseluruhan (elak kuota terbakar)
 var MAX_PERCUBAAN = 6;
 
-var VERSI_SKRIP = "8.0-diagnostik";
+var VERSI_SKRIP = "9.0-uji-video";
 
 // ID folder Google Drive khas untuk simpanan video aktiviti
 var FOLDER_VIDEO_ID = "1l1RNAGy9jyVnFkxDvk9UMt4cTdqcDW_c";
+
+/**
+ * UJIAN MUAT NAIK VIDEO.
+ * Fungsi ini boleh dijalankan terus daripada editor Apps Script (Run), atau
+ * dipanggil oleh butang "Uji Muat Naik Drive" dalam aplikasi.
+ * Ia mencipta fail WebM ujian kecil untuk mengesahkan folder dan kebenaran Drive.
+ */
+function ujiMuatNaikVideo() {
+  var nama = "UJIAN_OPR_" + Utilities.formatDate(new Date(), "Asia/Kuala_Lumpur", "yyyyMMdd_HHmmss") + ".webm";
+  var baitUjian = Utilities.base64Decode("GkXfo0AgQoaBAULygQFC8oEEQvOBCEKCiQE=");
+  var blob = Utilities.newBlob(baitUjian, "video/webm", nama);
+  var folder = DriveApp.getFolderById(FOLDER_VIDEO_ID);
+  var fail = folder.createFile(blob);
+  kongsiAwam(fail.getId());
+  return {
+    success: true,
+    version: VERSI_SKRIP,
+    videoSupport: true,
+    fileId: fail.getId(),
+    name: fail.getName(),
+    url: "https://drive.google.com/file/d/" + fail.getId() + "/view"
+  };
+}
+
+function ujiMuatNaikVideoWeb() {
+  try {
+    return respond(ujiMuatNaikVideo());
+  } catch (err) {
+    return respond({
+      success: false,
+      version: VERSI_SKRIP,
+      videoSupport: true,
+      error: "Ujian Drive gagal: " + String(err && err.message ? err.message : err)
+    });
+  }
+}
 
 /**
  * Muat naik video ke folder Google Drive dan pulangkan pautan awam
@@ -182,6 +218,9 @@ function doPost(e) {
     // Tindakan muat naik video ke Google Drive
     if (String(data.action || "") === "uploadVideo") {
       return muatNaikVideo(data);
+    }
+    if (String(data.action || "") === "testVideoUpload") {
+      return ujiMuatNaikVideoWeb();
     }
     if (String(data.action || "") === "startVideoUpload") {
       return mulaSesiVideo(data);
@@ -540,7 +579,7 @@ function doGet(e) {
     success: true,
     version: VERSI_SKRIP,
     videoSupport: true,
-    actions: ["uploadVideo", "startVideoUpload", "putVideoChunk", "finishVideoUpload", "ping"],
+    actions: ["testVideoUpload", "uploadVideo", "startVideoUpload", "putVideoChunk", "finishVideoUpload", "ping"],
     text: "Perkhidmatan penjana OPR sedia digunakan."
   });
 }

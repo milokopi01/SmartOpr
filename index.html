@@ -452,6 +452,7 @@
     <div class="sub-menu" id="menuVideo">
       <button onclick="document.getElementById('videoFileInput').click()" class="btn-chip">🎞️ Pilih / Rakam Video</button>
       <button onclick="mulaRakamanSkrin()" class="btn-chip">⏺️ Rakam Dalam App</button>
+      <button id="btnUjiDrive" onclick="ujiMuatNaikDrive()" class="btn-chip">🧪 Uji Muat Naik Drive</button>
     </div>
     <small style="color:#4a5568; display:block; margin-top:6px; font-size:12px;">Video dimuat naik ke Google Drive &amp; dipaparkan sebagai Kod QR.</small>
     <div class="rakam-kotak" id="rakamKotak">
@@ -1073,7 +1074,6 @@
     }
 
     async function generateOPR() {
-      const url = "https://script.google.com/macros/s/AKfycbzmVECUOYTNNOi2wGoIRbt3uygcFkcpXTX1IXsnhtg2Q6xI9qFxkapVTcDGzvT1ybQe/exec";
       const promptAsal = document.getElementById('promptInput').value.trim();
       let maxWords = parseInt(document.getElementById('maxWordsInput').value) || 180;
       maxWords = Math.min(400, Math.max(50, maxWords));
@@ -1121,7 +1121,7 @@
       textContainer.textContent = 'Sedang memproses laporan. Sila tunggu sebentar...';
 
       try {
-        const response = await fetch(url, {
+        const response = await fetch(API_URL, {
           method: 'POST',
           body: JSON.stringify({
             prompt: arahanTegas,
@@ -1175,8 +1175,36 @@
 
 
     // ================= 6. VIDEO + KOD QR + SIMPANAN PERANTI =================
-    const API_URL = "https://script.google.com/macros/s/AKfycbzDsLkKYQdEQQ5bd5SMSoFxCMcWH5obyqp-uuriXa4jzlJd2Vzxm9j75dk3TwmhctaG/exec";
+    // SATU URL sahaja untuk teks, semakan versi dan video. Jangan guna URL berbeza.
+    // Selepas Deploy > New version, URL deployment yang sama boleh dikekalkan.
+    const API_URL = "https://script.google.com/macros/s/AKfycbwA8tLmmz09q37uoILOQrleBpGTBKdKf0FkcbHwtelFD0iIJ1mtC7Szgw8G4Kcb947s/exec";
     let videosArray = [];
+
+    async function ujiMuatNaikDrive() {
+      const butang = document.getElementById('btnUjiDrive');
+      if (butang) { butang.disabled = true; butang.textContent = '⏳ Sedang Menguji...'; }
+      try {
+        const respons = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'testVideoUpload', fileName: 'UJIAN_OPR_' + Date.now() + '.webm' })
+        });
+        const mentah = await respons.text();
+        let hasil;
+        try { hasil = JSON.parse(mentah); }
+        catch (e) { throw new Error('URL Apps Script memulangkan HTML, bukan JSON. Pastikan akses deployment ialah Anyone.'); }
+        if (!hasil.success) throw new Error(hasil.error || 'Ujian ditolak oleh Apps Script.');
+        SKRIP_INFO = hasil;
+        LogRalat.info('UJIAN BERJAYA: Apps Script versi ' + hasil.version + ' boleh menulis ke folder Google Drive.', hasil.url || '');
+        alert('UJIAN BERJAYA\n\nFail ujian telah dimuat naik ke Google Drive.\nVersi skrip: ' + hasil.version);
+      } catch (e) {
+        const pesan = huraiRalatRangkaian(e, 'Ujian muat naik Drive');
+        LogRalat.ralat(pesan);
+        alert('UJIAN GAGAL\n\n' + pesan + '\n\nBuka butang Ralat untuk salin butiran.');
+      } finally {
+        if (butang) { butang.disabled = false; butang.textContent = '🧪 Uji Muat Naik Drive'; }
+      }
+    }
 
     // ---- Pangkalan data tempatan (IndexedDB) untuk memori komputer & telefon ----
     function bukaDB() {
