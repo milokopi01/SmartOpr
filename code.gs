@@ -28,7 +28,7 @@ var MODELS = [
 // Bilangan percubaan maksimum keseluruhan (elak kuota terbakar)
 var MAX_PERCUBAAN = 6;
 
-var VERSI_SKRIP = "9.0-uji-video";
+var VERSI_SKRIP = "9.1-muat-naik-tahan-rangkaian";
 
 // ID folder Google Drive khas untuk simpanan video aktiviti
 var FOLDER_VIDEO_ID = "1l1RNAGy9jyVnFkxDvk9UMt4cTdqcDW_c";

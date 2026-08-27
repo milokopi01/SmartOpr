@@ -319,18 +319,54 @@
     async function semakSkrip(paksa) {
       if (SKRIP_INFO && !paksa) return SKRIP_INFO;
       try {
-        const r = await fetch(API_URL + '?action=ping&t=' + Date.now(), { method: 'GET' });
+        const r = await fetchTamatMasa(API_URL + '?action=ping&t=' + Date.now(), { method: 'GET' }, 15000);
         const t = await r.text();
         SKRIP_INFO = JSON.parse(t);
       } catch (e) {
-        SKRIP_INFO = { success: false, error: String((e && e.message) || e) };
+        SKRIP_INFO = { success: false, error: String((e && e.name === 'AbortError') ? 'Tamat masa menunggu pelayan (>15s).' : ((e && e.message) || e)) };
       }
       return SKRIP_INFO;
+    }
+
+    /* Fetch dengan had masa (timeout) supaya muat naik tidak tersekat selama-lamanya
+       jika sambungan terputus di tengah jalan (punca #4 dalam senarai ralat rangkaian). */
+    function fetchTamatMasa(url, opsyen, msTamat) {
+      opsyen = opsyen || {};
+      msTamat = msTamat || 45000;
+      const kawalan = new AbortController();
+      const masaTamat = setTimeout(() => kawalan.abort(), msTamat);
+      return fetch(url, Object.assign({}, opsyen, { signal: kawalan.signal }))
+        .finally(() => clearTimeout(masaTamat));
+    }
+
+    /* Ulang percubaan automatik untuk ralat rangkaian SEMENTARA sahaja (Failed to fetch,
+       tamat masa, dsb). Ralat logik pelayan (cth. Drive tolak fail) TIDAK diulang. */
+    async function cubaBerulang(fungsi, kaliMax, konteks) {
+      kaliMax = kaliMax || 3;
+      let ralatTerakhir;
+      for (let k = 1; k <= kaliMax; k++) {
+        try {
+          return await fungsi();
+        } catch (e) {
+          ralatTerakhir = e;
+          const m = (e && e.message) ? e.message : String(e);
+          const puncaRangkaian = (e && e.name === 'AbortError') ||
+            /Failed to fetch|NetworkError|Load failed|network request failed/i.test(m);
+          if (!puncaRangkaian || k === kaliMax) throw e;
+          LogRalat.info((konteks || 'Muat naik') + ': percubaan ' + k + ' gagal (' + m + '), mencuba semula ' + k + '/' + kaliMax + '...');
+          await new Promise(r => setTimeout(r, 1200 * k));
+        }
+      }
+      throw ralatTerakhir;
     }
 
     /* Terjemah ralat rangkaian kepada bahasa mudah difahami */
     function huraiRalatRangkaian(e, konteks) {
       var m = (e && e.message) ? e.message : String(e);
+      if (e && e.name === 'AbortError') {
+        return konteks + ': Tamat masa menunggu pelayan (sambungan terlalu perlahan atau terputus). ' +
+          'Sistem akan cuba kaedah/potongan semula secara automatik.';
+      }
       // JANGAN lagi menuduh "versi lama" secara membuta tuli. Kita hanya melaporkan
       // apa yang benar-benar berlaku, dan versi skrip sebenar disemak melalui ping.
       if (/messages\.\d+\.content|property 'content' is missing|role:user/i.test(m)) {
@@ -1184,11 +1220,11 @@
       const butang = document.getElementById('btnUjiDrive');
       if (butang) { butang.disabled = true; butang.textContent = '⏳ Sedang Menguji...'; }
       try {
-        const respons = await fetch(API_URL, {
+        const respons = await fetchTamatMasa(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ action: 'testVideoUpload', fileName: 'UJIAN_OPR_' + Date.now() + '.webm' })
-        });
+        }, 20000);
         const mentah = await respons.text();
         let hasil;
         try { hasil = JSON.parse(mentah); }
@@ -1293,13 +1329,29 @@
       if (info && info.success && info.version) {
         LogRalat.info('Skrip Apps Script aktif: versi ' + info.version + (info.videoSupport ? ' (sokongan video: ADA)' : ' (sokongan video: TIADA)'));
       }
+      if (!info || !info.success) {
+        // Pelayan Apps Script langsung tidak dapat dihubungi. Kaedah 1/2/3 semuanya
+        // bergantung pada API_URL yang sama, jadi ketiga-tiganya akan gagal dengan cara
+        // yang serupa — lapor terus supaya tidak membazir masa mengulang 3 kali.
+        item.status = 'gagal';
+        item.peratus = 0;
+        item.ralat = 'Muat naik video "' + item.nama + '": Tidak dapat menghubungi pelayan Apps Script (' +
+          ((info && info.error) || 'tiada respons') + '). Semak: (1) sambungan Internet peranti, ' +
+          '(2) API_URL dalam index.html sepadan dengan URL "Deploy > Web app" TERKINI, ' +
+          '(3) tetapan deployment "Who has access" = Anyone, (4) skrip sudah di-deploy semula ' +
+          '(New version) selepas kemas kini code.gs.';
+        LogRalat.ralat(item.ralat);
+        renderVideos();
+        simpanVideoSesi();
+        return;
+      }
       // Muat naik "resumable" terus ke Google Drive — tiada had saiz video.
       item.status = 'naik';
       item.ralat = '';
       item.peratus = 0;
       renderVideos();
       try {
-        const mula = await fetch(API_URL, {
+        const mula = await cubaBerulang(() => fetchTamatMasa(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
@@ -1307,7 +1359,7 @@
             fileName: item.nama,
             mimeType: item.jenis
           })
-        });
+        }, 20000), 3, 'Mula sesi muat naik');
         const sesi = JSON.parse(await mula.text());
         if (!sesi.success || !sesi.uploadUrl) throw new Error(sesi.error || 'Gagal memulakan muat naik.');
 
@@ -1320,11 +1372,11 @@
         while (mulaBait < jumlah) {
           const hujung = Math.min(mulaBait + SAIZ_POTONGAN, jumlah);
           const potongan = fail.slice(mulaBait, hujung);
-          const r = await fetch(uploadUrl, {
+          const r = await cubaBerulang(() => fetchTamatMasa(uploadUrl, {
             method: 'PUT',
             headers: { 'Content-Range': 'bytes ' + mulaBait + '-' + (hujung - 1) + '/' + jumlah },
             body: potongan
-          });
+          }, 60000), 3, 'Potongan video ' + saizMesra(mulaBait) + '/' + saizMesra(jumlah));
 
           if (r.status === 308) {
             const julat = r.headers.get('Range');
@@ -1341,11 +1393,11 @@
 
         if (!hasilAkhir || !hasilAkhir.id) throw new Error('Muat naik selesai tetapi Drive tidak memulangkan ID fail.');
 
-        const siap = await fetch(API_URL, {
+        const siap = await cubaBerulang(() => fetchTamatMasa(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ action: 'finishVideoUpload', fileId: hasilAkhir.id })
-        });
+        }, 20000), 3, 'Selesaikan muat naik');
         const pautan = JSON.parse(await siap.text());
         item.status = 'siap';
         item.fileId = hasilAkhir.id;
@@ -1398,11 +1450,11 @@
         item.ralat = '';
         renderVideos();
 
-        const mula = await fetch(API_URL, {
+        const mula = await cubaBerulang(() => fetchTamatMasa(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ action: 'startVideoUpload', fileName: item.nama, mimeType: item.jenis })
-        });
+        }, 20000), 3, 'Mula sesi berpotongan');
         const sesi = JSON.parse(await mula.text());
         if (!sesi.success || !sesi.uploadUrl) throw new Error(sesi.error || 'Gagal memulakan sesi muat naik.');
 
@@ -1413,7 +1465,7 @@
         while (mulaBait < jumlah) {
           const hujung = Math.min(mulaBait + SAIZ, jumlah);
           const b64 = await bacaPotonganB64(fail.slice(mulaBait, hujung));
-          const res = await fetch(API_URL, {
+          const res = await cubaBerulang(() => fetchTamatMasa(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify({
@@ -1423,7 +1475,7 @@
               total: jumlah,
               chunk: b64
             })
-          });
+          }, 45000), 3, 'Potongan berelay ' + saizMesra(mulaBait) + '/' + saizMesra(jumlah));
           const mentah = await res.text();
           let hasil;
           try { hasil = JSON.parse(mentah); }
@@ -1439,11 +1491,11 @@
 
         if (!fileId) throw new Error('Muat naik selesai tetapi Drive tidak memulangkan ID fail.');
 
-        const siap = await fetch(API_URL, {
+        const siap = await cubaBerulang(() => fetchTamatMasa(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ action: 'finishVideoUpload', fileId: fileId })
-        });
+        }, 20000), 3, 'Selesaikan muat naik berpotongan');
         let pautan = {};
         try { pautan = JSON.parse(await siap.text()); } catch (e) {}
         item.status = 'siap';
@@ -1474,11 +1526,11 @@
           r.onerror = () => gagal(new Error('Gagal membaca fail video daripada peranti.'));
           r.readAsDataURL(fail);
         });
-        const res = await fetch(API_URL, {
+        const res = await cubaBerulang(() => fetchTamatMasa(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ action: 'uploadVideo', fileName: item.nama, mimeType: item.jenis, fileData: b64 })
-        });
+        }, 90000), 3, 'Muat naik sandaran (base64)');
         const mentah = await res.text();
         let hasil;
         try { hasil = JSON.parse(mentah); }
