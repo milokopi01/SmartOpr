@@ -47,11 +47,6 @@
 
     .btn-icon { background: none; color: var(--primary); padding: 5px; font-size: 20px; flex: none; border-radius: 50%; min-height: auto; box-shadow: none; }
     .btn-icon:hover { background: #e2e8f0; color: #0f2544; }
-    /* Label yang berfungsi seperti butang (perlu untuk iOS/iPhone) */
-    label.btn-chip { display: inline-flex; align-items: center; justify-content: center; text-align: center; cursor: pointer; font-weight: bold; border-radius: 12px; flex: 1 1 160px; transition: transform .15s ease, box-shadow .15s ease, filter .15s ease; -webkit-tap-highlight-color: transparent; }
-    label.btn-chip:active { transform: translateY(0); filter: saturate(1.15); }
-    /* Input fail tidak boleh display:none pada iOS - guna sembunyi visual sahaja */
-    .input-fail-tersembunyi { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip: rect(0 0 0 0); border: 0; padding: 0; margin: -1px; }
     .sub-menu { display: none; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
     .sub-menu.active { display: flex; }
 
@@ -606,20 +601,20 @@
 
     <label>Media Laporan:</label>
     <div class="upload-group">
-      <input type="file" id="cameraInput" accept="image/*" capture="environment" class="input-fail-tersembunyi">
-      <input type="file" id="galleryInput" accept="image/*" multiple class="input-fail-tersembunyi">
-      <input type="file" id="videoFileInput" accept="video/*" multiple class="input-fail-tersembunyi">
-      <input type="file" id="videoCameraInput" accept="video/*" capture="environment" class="input-fail-tersembunyi">
+      <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none">
+      <input type="file" id="galleryInput" accept="image/*" multiple style="display:none">
+      <input type="file" id="videoFileInput" accept="video/*" multiple style="display:none">
+      <input type="file" id="videoCameraInput" accept="video/*" capture="environment" style="display:none">
 
       <button id="btnMenuGambar" onclick="togolMenuGambar()" class="btn-chip">🖼️ Tambah Gambar</button>
       <button id="btnMenuVideo" onclick="togolMenuVideo()" class="btn-chip">🎬 Tambah Video</button>
     </div>
     <div class="sub-menu" id="menuGambar">
-      <label for="cameraInput" class="btn-chip" onclick="tutupMenuGambarLewat()">📷 Buka Kamera</label>
-      <label for="galleryInput" class="btn-chip" onclick="tutupMenuGambarLewat()">🖼️ Muat Naik Gambar</label>
+      <button onclick="pilihSumberGambar('kamera')" class="btn-chip">📷 Buka Kamera</button>
+      <button onclick="pilihSumberGambar('galeri')" class="btn-chip">🖼️ Muat Naik Gambar</button>
     </div>
     <div class="sub-menu" id="menuVideo">
-      <label for="videoFileInput" class="btn-chip">🎞️ Pilih / Rakam Video</label>
+      <button onclick="document.getElementById('videoFileInput').click()" class="btn-chip">🎞️ Pilih / Rakam Video</button>
       <button onclick="mulaRakamanSkrin()" class="btn-chip">⏺️ Rakam Dalam App</button>
       <button id="btnUjiDrive" onclick="ujiMuatNaikDrive()" class="btn-chip">🧪 Uji Muat Naik Drive</button>
     </div>
@@ -923,23 +918,14 @@
       b.classList.toggle('aktif', buka);
     }
 
-    function tutupMenuGambarLewat() {
-      // Tutup menu SELEPAS dialog pemilih fail dibuka (iOS batalkan klik jika elemen hilang serta-merta)
-      setTimeout(() => {
-        const m = document.getElementById('menuGambar');
-        const b = document.getElementById('btnMenuGambar');
-        if (m) m.classList.remove('active');
-        if (b) b.classList.remove('aktif');
-      }, 600);
-    }
-
     function pilihSumberGambar(sumber) {
       try {
         document.getElementById(sumber === 'kamera' ? 'cameraInput' : 'galleryInput').click();
       } catch (e) {
         LogRalat.ralat('Gagal membuka ' + sumber + ': ' + (e.message || e));
       }
-      tutupMenuGambarLewat();
+      document.getElementById('menuGambar').classList.remove('active');
+      document.getElementById('btnMenuGambar').classList.remove('aktif');
     }
 
     document.getElementById('cameraInput').addEventListener('change', function() { handleImageFiles(this.files); this.value = ''; });
@@ -1262,81 +1248,6 @@
       return hasil;
     }
 
-    // ---------- TAJUK AUTOMATIK (AI) ----------
-    let tajukDiubahPengguna = false;
-
-    function elTajuk() { return document.querySelector('.report-title-bar h3'); }
-
-    function tetapkanTajukLaporan(tajuk) {
-      const el = elTajuk();
-      if (!el || !tajuk) return;
-      el.innerText = tajuk;
-      fitPage();
-    }
-
-    function bersihkanTajuk(teks) {
-      let t = (teks || '')
-        .replace(/[\r\n]+/g, ' ')
-        .replace(/[*#_`"'\u201C\u201D]/g, '')
-        .replace(/^\s*(tajuk|title)\s*[:\-]\s*/i, '')
-        .replace(/\s+/g, ' ')
-        .replace(/[.:;,\-\s]+$/, '')
-        .trim();
-      if (!t) return '';
-      const kata = t.split(' ');
-      if (kata.length > 12) t = kata.slice(0, 12).join(' ');
-      if (t.length > 80) t = t.slice(0, 80).trim();
-      t = t.toUpperCase();
-      if (!/^LAPORAN\b/.test(t)) t = 'LAPORAN ' + t;
-      return t;
-    }
-
-    // Tajuk sandaran jika AI gagal: ambil daripada prompt pengguna
-    function tajukDaripadaPrompt(prompt) {
-      const bersih = (prompt || '')
-        .replace(/\d{1,2}\s*[\/\-.]\s*\d{1,2}\s*[\/\-.]\s*\d{2,4}/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      if (!bersih) return '';
-      const potong = bersih.split(/[.\n;]/)[0] || bersih;
-      return bersihkanTajuk(potong.split(' ').slice(0, 10).join(' '));
-    }
-
-    async function janaTajukAuto(promptAsal, teksLaporan, tarikhTeks) {
-      if (tajukDiubahPengguna) return;
-      const el = elTajuk();
-      if (!el) return;
-      const tajukLama = (el.innerText || '').trim();
-      el.innerText = 'MENJANA TAJUK…';
-      let tajuk = '';
-      try {
-        const arahan =
-          `Anda pakar penamaan laporan rasmi sekolah.\n` +
-          `Berdasarkan maklumat program dan teks laporan di bawah, cadangkan SATU tajuk laporan sahaja.\n` +
-          `SYARAT: Bahasa Melayu Malaysia baku sahaja; maksimum 10 patah perkataan; ` +
-          `ringkas, khusus dan menggambarkan aktiviti sebenar; tanpa tarikh, tanpa nama sekolah, ` +
-          `tanpa tanda petik, tanpa markdown, tanpa penerangan tambahan.\n` +
-          `Balas dengan teks tajuk sahaja.\n\n` +
-          `MAKLUMAT PROGRAM: ${promptAsal}\n\n` +
-          `TEKS LAPORAN: ${(teksLaporan || '').slice(0, 900)}`;
-        const res = await fetchTamatMasa(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            prompt: arahan,
-            maxWords: 12,
-            language: 'ms-MY',
-            instruction: 'Balas dengan satu tajuk ringkas dalam Bahasa Melayu sahaja.'
-          })
-        }, 25000);
-        const hasil = JSON.parse(await res.text());
-        if (hasil && hasil.success && typeof hasil.text === 'string') tajuk = bersihkanTajuk(hasil.text);
-      } catch (e) { /* guna sandaran */ }
-      if (!tajuk) tajuk = tajukDaripadaPrompt(promptAsal);
-      if (!tajuk) tajuk = tajukLama && tajukLama !== 'MENJANA TAJUK…' ? tajukLama : 'LAPORAN SEHALAMAN (OPR)';
-      tetapkanTajukLaporan(tajuk);
-    }
-
     async function generateOPR() {
       const promptAsal = document.getElementById('promptInput').value.trim();
       let maxWords = parseInt(document.getElementById('maxWordsInput').value) || 180;
@@ -1417,8 +1328,6 @@
         const teksDijana = typeof result.text === 'string' ? result.text.trim() : '';
         if (result.success && teksDijana && kiraPerkataan(teksDijana) >= 20) {
           paparTeks(selaraskanTarikh(betulkanNamaSekolah(teksDijana, namaSekolah), tarikhProgram), maxWords);
-          janaTajukAuto(promptAsal, document.getElementById('oprText').innerText, tarikhTeks);
-
 
         } else {
           paparRalat(result.error || 'AI tidak memulangkan teks laporan yang lengkap. Sila jana semula.');
@@ -1945,286 +1854,7 @@
     }
 
     // ---- Simpan & jana semula laporan (memori komputer / telefon) ----
-    /* ================= 7. KONGSI SEBAGAI PDF (WhatsApp/Telegram/dsb.) =================
-       PDF dijana secara VEKTOR: semua teks kekal sebagai teks sebenar (boleh pilih,
-       cari & edit), hanya gambar/QR sahaja imej. Kualiti sama seperti "Simpan PDF". */
-
-    const PT2MM = 25.4 / 72;
-
-    function _bersihTeksPdf(t) {
-      return String(t || '')
-        .replace(/\u00a0/g, ' ')
-        .replace(/[\u2018\u2019]/g, "'")
-        .replace(/[\u201c\u201d]/g, '"')
-        .replace(/[\u2013\u2014]/g, '-')
-        .replace(/[^\x09\x0a\x0d\x20-\xFF]/g, '')
-        .replace(/[ \t]+/g, ' ')
-        .trim();
-    }
-
-    function _hexKeRgb(warna) {
-      const s = String(warna || '').trim();
-      let m = s.match(/^#([0-9a-f]{3})$/i);
-      if (m) return [parseInt(m[1][0] + m[1][0], 16), parseInt(m[1][1] + m[1][1], 16), parseInt(m[1][2] + m[1][2], 16)];
-      m = s.match(/^#([0-9a-f]{6})$/i);
-      if (m) return [parseInt(m[1].slice(0, 2), 16), parseInt(m[1].slice(2, 4), 16), parseInt(m[1].slice(4, 6), 16)];
-      m = s.match(/rgba?\(([^)]+)\)/i);
-      if (m) { const p = m[1].split(',').map(Number); return [p[0] || 0, p[1] || 0, p[2] || 0]; }
-      return [0, 0, 0];
-    }
-
-    function _warnaEl(el, prop) {
-      try { return _hexKeRgb(getComputedStyle(el)[prop]); } catch (e) { return [0, 0, 0]; }
-    }
-
-    /* Potong gambar mengikut kedudukan/zoom pengguna terus daripada elemen <img>
-       (tanpa html2canvas) supaya resolusi kekal tinggi & pantas. */
-    function _potongGambar(bungkusEl, imgEl, lebarMm, tinggiMm, dpi) {
-      const rw = bungkusEl.getBoundingClientRect();
-      const ri = imgEl.getBoundingClientRect();
-      const nw = imgEl.naturalWidth || ri.width, nh = imgEl.naturalHeight || ri.height;
-      if (!nw || !nh || !ri.width || !ri.height) return null;
-      const sx0 = nw / ri.width, sy0 = nh / ri.height;
-      let sx = Math.max(0, (rw.left - ri.left) * sx0);
-      let sy = Math.max(0, (rw.top - ri.top) * sy0);
-      let sw = Math.min(nw - sx, rw.width * sx0);
-      let sh = Math.min(nh - sy, rw.height * sy0);
-      if (sw <= 1 || sh <= 1) { sx = 0; sy = 0; sw = nw; sh = nh; }
-      const skala = (dpi || 300) / 25.4;
-      const ow = Math.max(1, Math.min(4000, Math.round(lebarMm * skala)));
-      const oh = Math.max(1, Math.min(4000, Math.round(tinggiMm * skala)));
-      const c = document.createElement('canvas');
-      c.width = ow; c.height = oh;
-      const ctx = c.getContext('2d');
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, ow, oh);
-      ctx.drawImage(imgEl, sx, sy, sw, sh, 0, 0, ow, oh);
-      return c.toDataURL('image/jpeg', 0.94);
-    }
-
-    function _imgKeDataUrl(img) {
-      try {
-        const c = document.createElement('canvas');
-        const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
-        if (!w || !h) return null;
-        c.width = w; c.height = h;
-        const ctx = c.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-        return c.toDataURL('image/png');
-      } catch (e) { return null; }
-    }
-
-    function _perengganTeks(el) {
-      const keluar = [];
-      const tolak = (teks, tebal) => {
-        String(teks).split(/\n+/).forEach(baris => {
-          const b = _bersihTeksPdf(baris);
-          if (b) keluar.push({ teks: b, tebal: !!tebal });
-        });
-      };
-      el.childNodes.forEach(n => {
-        if (n.nodeType === 3) { tolak(n.textContent, false); return; }
-        if (n.nodeType !== 1) return;
-        if (n.tagName === 'BR') return;
-        let tebal = false;
-        try {
-          const fw = getComputedStyle(n).fontWeight;
-          tebal = /^(B|STRONG|H1|H2|H3|H4)$/.test(n.tagName) || parseInt(fw, 10) >= 600;
-        } catch (e) {}
-        tolak(n.innerText || n.textContent || '', tebal);
-      });
-      if (!keluar.length) tolak(el.innerText || '', false);
-      return keluar;
-    }
-
-    async function binaPdfVektor() {
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
-      pdf.setFont('helvetica', 'normal');
-
-      const page = document.querySelector('.a4-page');
-      const pr = page.getBoundingClientRect();
-      const S = 210 / pr.width;                       // px -> mm (ambil kira skala paparan telefon)
-      const R = el => {
-        const r = el.getBoundingClientRect();
-        return { x: (r.left - pr.left) * S, y: (r.top - pr.top) * S, w: r.width * S, h: r.height * S };
-      };
-      const saizPt = el => { try { return parseFloat(getComputedStyle(el).fontSize) * S / PT2MM; } catch (e) { return 10; } };
-
-      pdf.setFillColor(255, 255, 255);
-      pdf.rect(0, 0, 210, 297, 'F');
-
-      // ---------- 1. LOGO ----------
-      const logo = document.getElementById('printLogo');
-      if (logo && logo.complete && (logo.naturalWidth || 0) > 0) {
-        const rl = R(logo);
-        const data = _imgKeDataUrl(logo);
-        if (data) { try { pdf.addImage(data, 'PNG', rl.x, rl.y, rl.w, rl.h, undefined, 'FAST'); } catch (e) {} }
-      }
-
-      // ---------- 2. MAKLUMAT SEKOLAH (teks sebenar) ----------
-      const tulisTengah = (el, tebal) => {
-        if (!el) return;
-        const r = R(el);
-        const warna = _warnaEl(el, 'color');
-        const pt = saizPt(el);
-        pdf.setFont('helvetica', tebal ? 'bold' : 'normal');
-        pdf.setFontSize(pt);
-        pdf.setTextColor(warna[0], warna[1], warna[2]);
-        const baris = pdf.splitTextToSize(_bersihTeksPdf(el.innerText), r.w);
-        const lh = pt * PT2MM * 1.15;
-        let y = r.y + pt * PT2MM * 0.85;
-        baris.forEach(b => { pdf.text(b, r.x + r.w / 2, y, { align: 'center' }); y += lh; });
-      };
-      tulisTengah(document.getElementById('printSchoolName'), true);
-      tulisTengah(document.getElementById('printSchoolAddress'), true);
-      tulisTengah(document.getElementById('printSchoolContact'), false);
-
-      // ---------- 3. GARISAN HEADER (double) ----------
-      const header = page.querySelector('.header');
-      if (header) {
-        const rh = R(header);
-        const wp = _warnaEl(header, 'borderBottomColor');
-        pdf.setDrawColor(wp[0], wp[1], wp[2]);
-        pdf.setLineWidth(0.4);
-        pdf.line(rh.x, rh.y + rh.h, rh.x + rh.w, rh.y + rh.h);
-        pdf.line(rh.x, rh.y + rh.h + 0.8, rh.x + rh.w, rh.y + rh.h + 0.8);
-      }
-
-      // ---------- 4. RIBBON TAJUK ----------
-      const bar = page.querySelector('.report-title-bar');
-      if (bar) {
-        const rb = R(bar);
-        const bg = _warnaEl(bar, 'backgroundColor');
-        pdf.setFillColor(bg[0], bg[1], bg[2]);
-        pdf.roundedRect(rb.x, rb.y, rb.w, rb.h, 0.8, 0.8, 'F');
-        const h3 = bar.querySelector('h3'), sp = bar.querySelector('span');
-        const fg = _warnaEl(bar, 'color');
-        pdf.setTextColor(fg[0], fg[1], fg[2]);
-        if (h3) {
-          const r3 = R(h3), pt = saizPt(h3);
-          pdf.setFont('helvetica', 'bold'); pdf.setFontSize(pt);
-          pdf.text(_bersihTeksPdf(h3.innerText), r3.x, rb.y + rb.h / 2 + pt * PT2MM * 0.35);
-        }
-        if (sp) {
-          const rs = R(sp), pt = saizPt(sp);
-          pdf.setFont('helvetica', 'bold'); pdf.setFontSize(pt);
-          pdf.text(_bersihTeksPdf(sp.innerText), rs.x + rs.w, rb.y + rb.h / 2 + pt * PT2MM * 0.35, { align: 'right' });
-        }
-      }
-
-      // ---------- 5. TEKS LAPORAN (vektor, justify) ----------
-      const oprEl = document.getElementById('oprText');
-      if (oprEl) {
-        const rt = R(oprEl);
-        const pad = 1.2;
-        const x = rt.x + pad, w = Math.max(20, rt.w - pad * 2);
-        const perenggan = _perengganTeks(oprEl);
-        const warna = _warnaEl(oprEl, 'color');
-        let pt = saizPt(oprEl);
-        let susun = null;
-        for (let cuba = 0; cuba < 40; cuba++) {
-          pdf.setFontSize(pt);
-          const jarak = pt * PT2MM * 1.55;
-          let tinggi = 0; const bloks = [];
-          perenggan.forEach(p => {
-            pdf.setFont('helvetica', p.tebal ? 'bold' : 'normal');
-            const baris = pdf.splitTextToSize(p.teks, w);
-            bloks.push({ baris, tebal: p.tebal });
-            tinggi += baris.length * jarak + jarak * 0.35;
-          });
-          if (tinggi <= rt.h - pad * 2 || pt <= 6.5) { susun = { bloks, jarak, pt }; break; }
-          pt -= 0.25;
-        }
-        if (susun) {
-          pdf.setTextColor(warna[0], warna[1], warna[2]);
-          pdf.setFontSize(susun.pt);
-          let y = rt.y + pad + susun.pt * PT2MM * 0.9;
-          susun.bloks.forEach(b => {
-            pdf.setFont('helvetica', b.tebal ? 'bold' : 'normal');
-            b.baris.forEach((baris, i) => {
-              const akhir = i === b.baris.length - 1;
-              if (akhir || baris.trim().split(/\s+/).length < 2) pdf.text(baris, x, y);
-              else pdf.text(baris, x, y, { align: 'justify', maxWidth: w });
-              y += susun.jarak;
-            });
-            y += susun.jarak * 0.35;
-          });
-        }
-      }
-
-      // ---------- 6. KOD QR ----------
-      const kadQr = page.querySelectorAll('.qr-kad');
-      for (const kad of kadQr) {
-        const rk = R(kad);
-        const wp = _warnaEl(kad, 'borderTopColor');
-        pdf.setDrawColor(wp[0], wp[1], wp[2]); pdf.setLineWidth(0.2);
-        pdf.setFillColor(255, 255, 255);
-        pdf.roundedRect(rk.x, rk.y, rk.w, rk.h, 0.8, 0.8, 'FD');
-        const kanvas = kad.querySelector('canvas');
-        const imej = kad.querySelector('img');
-        let data = null;
-        try { data = kanvas ? kanvas.toDataURL('image/png') : (imej ? _imgKeDataUrl(imej) : null); } catch (e) { data = null; }
-        const sasar = kanvas || imej;
-        if (data && sasar) {
-          const rq = R(sasar);
-          try { pdf.addImage(data, 'PNG', rq.x, rq.y, rq.w, rq.h); } catch (e) {}
-        }
-        const label = kad.querySelector('span');
-        if (label) {
-          const rs = R(label), pt = Math.max(5, saizPt(label));
-          const wl = _warnaEl(label, 'color');
-          pdf.setFont('helvetica', 'bold'); pdf.setFontSize(pt);
-          pdf.setTextColor(wl[0], wl[1], wl[2]);
-          const baris = pdf.splitTextToSize(_bersihTeksPdf(label.innerText), rs.w);
-          let y = rs.y + pt * PT2MM * 0.9;
-          baris.forEach(b => { pdf.text(b, rs.x + rs.w / 2, y, { align: 'center' }); y += pt * PT2MM * 1.15; });
-        }
-      }
-
-      // ---------- 7. PEMBAHAGI ----------
-      const bawah = page.querySelector('.bottom-half');
-      if (bawah) {
-        const rbw = R(bawah);
-        const wd = _warnaEl(bawah, 'borderTopColor');
-        pdf.setDrawColor(wd[0], wd[1], wd[2]); pdf.setLineWidth(0.5);
-        if (pdf.setLineDashPattern) pdf.setLineDashPattern([1.6, 1.2], 0);
-        pdf.line(rbw.x, rbw.y, rbw.x + rbw.w, rbw.y);
-        if (pdf.setLineDashPattern) pdf.setLineDashPattern([], 0);
-      }
-
-      // ---------- 8. GAMBAR AKTIVITI (resolusi tinggi) ----------
-      const bungkus = page.querySelectorAll('#imageCollage .img-wrapper');
-      for (const bk of bungkus) {
-        const rw = R(bk);
-        const img = bk.querySelector('img');
-        if (!img) continue;
-        let data = null;
-        try { data = _potongGambar(bk, img, rw.w, rw.h, 300); } catch (e) { data = null; }
-        if (data) {
-          try { pdf.addImage(data, 'JPEG', rw.x, rw.y, rw.w, rw.h, undefined, 'SLOW'); } catch (e) {}
-        }
-        const wb = _warnaEl(bk, 'borderTopColor');
-        pdf.setDrawColor(wb[0], wb[1], wb[2]); pdf.setLineWidth(0.2);
-        pdf.roundedRect(rw.x, rw.y, rw.w, rw.h, 1, 1, 'S');
-      }
-
-      pdf.setProperties({ title: _bersihTeksPdf((document.querySelector('.report-title-bar h3') || {}).innerText || 'Laporan OPR') });
-      return pdf;
-    }
-
-    async function binaPdfImej() {
-      // Sandaran: jika penjanaan vektor gagal, guna tangkapan imej resolusi tinggi
-      const page = document.querySelector('.a4-page');
-      const canvas = await html2canvas(page, { scale: 3, useCORS: true, backgroundColor: '#ffffff' });
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
-      pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', 0, 0, 210, 297, undefined, 'SLOW');
-      return pdf;
-    }
-
+    /* ================= 7. KONGSI SEBAGAI PDF (WhatsApp/Telegram/dsb.) ================= */
     async function kongsiPDF() {
       const btn = document.getElementById('btnKongsiPDF');
       const teksAsal = btn ? btn.textContent : '';
@@ -2238,13 +1868,40 @@
 
         if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyediakan PDF...'; }
 
-        let pdf;
+        // PENTING: pada telefon, #pageScaler diskalakan-kecil (CSS transform) oleh fitPage()
+        // supaya muat pada skrin. Jika html2canvas menangkap ketika transform ini aktif,
+        // ia menangkap versi kecil lalu direntang semula ke saiz A4 penuh dalam PDF —
+        // punca utama teks kabur/terabur. Jadi neutralkan transform dahulu, tangkap
+        // pada saiz penuh, kemudian pulihkan semula paparan asal.
+        const scaler = document.getElementById('pageScaler');
+        const wrap = document.getElementById('pageWrap');
+        const transformAsal = scaler ? scaler.style.transform : '';
+        const wrapHeightAsal = wrap ? wrap.style.height : '';
+        if (scaler) scaler.style.transform = 'none';
+        if (wrap) wrap.style.height = 'auto';
+        // Beri masa untuk browser reflow selepas transform dibuang
+        await new Promise(r => setTimeout(r, 50));
+
+        let canvas;
         try {
-          pdf = await binaPdfVektor();
-        } catch (e) {
-          LogRalat.info('PDF vektor gagal, guna kaedah imej: ' + (e && e.message ? e.message : e));
-          pdf = await binaPdfImej();
+          canvas = await html2canvas(page, {
+            scale: Math.max(3, window.devicePixelRatio || 1),
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            windowWidth: page.scrollWidth,
+            windowHeight: page.scrollHeight
+          });
+        } finally {
+          // Pulihkan paparan asal (skala telefon) selepas tangkapan selesai
+          if (scaler) scaler.style.transform = transformAsal;
+          if (wrap) wrap.style.height = wrapHeightAsal;
         }
+
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+        // Guna PNG (bukan JPEG) supaya tepi huruf kekal tajam - JPEG mengaburkan teks
+        const dataUrl = canvas.toDataURL('image/png');
+        pdf.addImage(dataUrl, 'PNG', 0, 0, 210, 297);
 
         const tajuk = (document.querySelector('.report-title-bar h3').innerText || 'Laporan OPR').trim();
         const namaFail = 'OPR_' + tajuk.replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 40) + '_' + Utilities_tarikhFail() + '.pdf';
@@ -2257,7 +1914,7 @@
             title: tajuk,
             text: 'Laporan Satu Muka Surat (OPR): ' + tajuk
           });
-          LogRalat.info('PDF laporan (teks vektor) dikongsi melalui menu kongsi peranti.');
+          LogRalat.info('PDF laporan dikongsi melalui menu kongsi peranti.');
         } else {
           muatTurunBlob(blobPdf, namaFail);
           await alertKustom('Peranti/pelayar ini tidak menyokong kongsi terus fail. PDF telah dimuat turun ke telefon anda — sila buka WhatsApp/Telegram dan lampirkan fail tersebut secara manual daripada storan/muat turun.', 'PDF Dimuat Turun', 'info');
@@ -2377,7 +2034,6 @@
         document.getElementById('setSchoolAddress').value = r.sekolah.address;
         document.getElementById('setSchoolContact').value = r.sekolah.contact;
       }
-      if (r.tajuk) { tajukDiubahPengguna = false; tetapkanTajukLaporan(r.tajuk); }
       applyTemplate(typeof r.templet === 'number' ? r.templet : 0, false);
       applySplit(typeof r.split === 'number' ? r.split : 48, false);
       imagesArray = Array.isArray(r.gambar) ? r.gambar : [];
@@ -2404,10 +2060,6 @@
     document.getElementById('splitRange').addEventListener('input', function () { applySplit(this.value, true); });
     fitPage();
     window.addEventListener('load', fitPage);
-    (function pantauSuntinganTajuk() {
-      const el = elTajuk();
-      if (el) el.addEventListener('input', function () { tajukDiubahPengguna = true; });
-    })();
     kemasKiniKiraan();
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js');
