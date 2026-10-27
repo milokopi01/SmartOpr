@@ -1352,7 +1352,7 @@
     // ================= 6. VIDEO + KOD QR + SIMPANAN PERANTI =================
     // SATU URL sahaja untuk teks, semakan versi dan video. Jangan guna URL berbeza.
     // Selepas Deploy > New version, URL deployment yang sama boleh dikekalkan.
-    const API_URL = "https://script.google.com/macros/s/AKfycbxShVfRZXjq1Tzj2BaT2spelBIO3Z946l7YK2dXH_sbCr8m0A-CJ9A8Nq38sZEZNvxC/exec";
+    const API_URL = "https://script.google.com/macros/s/AKfycbxA6xSbGILtW7FB9dmXaqiFWhBSiadydY3COO5Soh82bpqrJ8Pn3wL_GrfWNfAN0ePx/exec";
     let videosArray = [];
 
     async function ujiMuatNaikDrive() {
@@ -1911,12 +1911,14 @@
           canvas = await html2canvas(page, {
             scale: 2, useCORS: true, allowTaint: false, imageTimeout: 15000,
             backgroundColor: '#ffffff', logging: false,
+            ignoreElements: el => el.classList && (el.classList.contains('zoom-controls') || el.classList.contains('ralat-butang') || el.classList.contains('ralat-panel')),
             windowWidth: page.scrollWidth, windowHeight: page.scrollHeight
           });
         } catch (e1) {
           // Cuba semula pada skala lebih rendah jika memori tidak mencukupi
           canvas = await html2canvas(page, {
             scale: 1.5, useCORS: true, backgroundColor: '#ffffff', logging: false,
+            ignoreElements: el => el.classList && (el.classList.contains('zoom-controls') || el.classList.contains('ralat-butang') || el.classList.contains('ralat-panel')),
             windowWidth: page.scrollWidth, windowHeight: page.scrollHeight
           });
         }
