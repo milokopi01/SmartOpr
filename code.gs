@@ -28,7 +28,8 @@ var MODELS = [
 // Bilangan percubaan maksimum keseluruhan (elak kuota terbakar)
 var MAX_PERCUBAAN = 6;
 
-var VERSI_SKRIP = "9.6-wasap-admin-siap";
+var VERSI_SKRIP = "9.7-wasap-ralat-auto";
+var MESEJ_UMUM = "Laporan tidak dapat dijana. Sila hubungi admin di no 01110661077.";
 
 // Nombor WhatsApp admin lalai (format antarabangsa, tanpa +).
 // Boleh ditukar melalui sel B1 sheet 'apieky' tanpa mengubah kod.
@@ -235,22 +236,23 @@ function doPost(e) {
     if (String(data.action || "") === "putVideoChunk") {
       return terimaPotonganVideo(data);
     }
+    if (String(data.action || "") === "laporRalat") {
+      hantarWasapAdmin("RALAT APP OPR (pengguna): " + String(data.mesej || "").slice(0, 700));
+      return respond({ success: true });
+    }
     if (String(data.action || "") === "ping") {
       return respond({ success: true, version: VERSI_SKRIP, videoSupport: true });
     }
     var tindakan = String(data.action || "");
     if (tindakan && tindakan !== "generate") {
-      return respond({ success: false, error: "Tindakan tidak dikenali: " + tindakan + " (versi skrip " + VERSI_SKRIP + ")" });
+      return gagal("Tindakan tidak dikenali: " + tindakan + " (versi skrip " + VERSI_SKRIP + ")");
     }
 
     var prompt = String(data.prompt || "").trim();
 
     if (!prompt) {
-      return respond({
-        success: false,
-        error: "Arahan laporan (prompt) tidak boleh kosong. Jika ini permintaan video, " +
-               "skrip yang di-deploy mungkin versi lama — sila deploy semula code.gs terbaru."
-      });
+      return gagal("Arahan laporan (prompt) tidak boleh kosong. Jika ini permintaan video, " +
+               "skrip yang di-deploy mungkin versi lama — sila deploy semula code.gs terbaru.");
     }
 
     var maxWords = parseInt(data.maxWords, 10);
@@ -262,12 +264,12 @@ function doPost(e) {
     var sheet = ss.getSheetByName("apieky") || ss.getSheetByName("apikey");
 
     if (!sheet) {
-      return respond({ success: false, error: "Sheet bernama 'apieky' tidak dijumpai." });
+      return gagal("Sheet bernama 'apieky' tidak dijumpai.");
     }
 
     var keys = sheet.getRange("A1:A" + sheet.getLastRow()).getValues().flat().filter(String);
     if (keys.length === 0) {
-      return respond({ success: false, error: "Tiada API Key dijumpai di lajur A." });
+      return gagal("Tiada API Key dijumpai di lajur A.");
     }
 
     var systemPrompt;
@@ -376,10 +378,7 @@ function doPost(e) {
       hantarWasapAdmin("AMARAN OPR: Semua kunci API gagal atau habis kuota pada " +
         Utilities.formatDate(new Date(), "Asia/Kuala_Lumpur", "dd/MM/yyyy HH:mm") +
         ". Sila semak sheet 'apieky' dan tambah kunci baharu.");
-      return respond({
-        success: false,
-        error: "Semua kunci API telah habis digunakan. Sila hubungi admin."
-      });
+      return gagal("Semua kunci API telah habis digunakan. Sila hubungi admin.");
     }
 
     return respond({
@@ -391,42 +390,60 @@ function doPost(e) {
     });
 
   } catch (error) {
-    return respond({ success: false, error: error.message });
+    return gagal(error.message);
   }
 }
 
 
+/** Hantar punca sebenar kepada admin secara senyap, pulangkan mesej umum kepada pengguna. */
+function gagal(punca) {
+  hantarWasapAdmin("RALAT APP OPR: " + punca);
+  return respond({ success: false, error: MESEJ_UMUM });
+}
+
 /**
- * Hantar amaran WhatsApp kepada admin secara senyap (CallMeBot).
- * Tetapan dibaca daripada sheet 'apieky':
- *   B1 = nombor WhatsApp admin (cth: 60123456789)
- *   C1 = apikey CallMeBot admin
- * Maksimum 1 mesej sejam supaya tidak spam. Semua ralat ditelan senyap.
+ * Hantar ralat WhatsApp kepada admin secara senyap (CallMeBot).
+ * Nombor: sel B1 sheet 'apieky' (atau nombor lalai 601110661077).
+ * Kunci CallMeBot: sel C1 sheet 'apieky' ATAU Script Property CALLMEBOT_APIKEY.
+ * Mesej sama tidak diulang dalam 10 minit supaya tidak spam.
  */
 function hantarWasapAdmin(mesej) {
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName("apieky") || ss.getSheetByName("apikey");
-    if (!sheet) return;
-    var nombor = String(sheet.getRange("B1").getValue() || "").replace(/[^0-9]/g, "") || NOMBOR_ADMIN_LALAI;
-    var kunciWasap = String(sheet.getRange("C1").getValue() || "").trim();
-    if (!nombor || !kunciWasap) return; // apikey CallMeBot belum diisi - senyap sahaja
+    var nombor = "", kunciWasap = "";
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheet = ss && (ss.getSheetByName("apieky") || ss.getSheetByName("apikey"));
+      if (sheet) {
+        nombor = String(sheet.getRange("B1").getValue() || "").replace(/[^0-9]/g, "");
+        kunciWasap = String(sheet.getRange("C1").getValue() || "").trim();
+      }
+    } catch (e) {}
+    nombor = nombor || NOMBOR_ADMIN_LALAI;
+    kunciWasap = kunciWasap || String(PropertiesService.getScriptProperties().getProperty("CALLMEBOT_APIKEY") || "").trim();
+    if (!kunciWasap) { console.log("CallMeBot apikey belum diisi: " + mesej); return; }
 
-    var props = PropertiesService.getScriptProperties();
-    var terakhir = parseInt(props.getProperty("WASAP_TERAKHIR") || "0", 10);
-    var kini = new Date().getTime();
-    if (kini - terakhir < 3600000) return; // had 1 mesej sejam
-    props.setProperty("WASAP_TERAKHIR", String(kini));
+    var cache = CacheService.getScriptCache();
+    var cap = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, String(mesej)));
+    if (cache.get("wa_" + cap)) return;
+    cache.put("wa_" + cap, "1", 600);
 
-    UrlFetchApp.fetch(
+    var teks = mesej + "\nMasa: " + Utilities.formatDate(new Date(), "Asia/Kuala_Lumpur", "dd/MM/yyyy HH:mm");
+    var res = UrlFetchApp.fetch(
       "https://api.callmebot.com/whatsapp.php?phone=" + nombor +
-      "&text=" + encodeURIComponent(mesej) +
+      "&text=" + encodeURIComponent(teks) +
       "&apikey=" + encodeURIComponent(kunciWasap),
       { "muteHttpExceptions": true }
     );
+    console.log("CallMeBot " + res.getResponseCode() + ": " + res.getContentText().slice(0, 300));
   } catch (e) {
-    // Senyap - notifikasi admin tidak boleh mengganggu pengguna.
+    console.log("Gagal hantar WhatsApp admin: " + e);
   }
+}
+
+/** Jalankan sekali dari editor Apps Script untuk uji WhatsApp admin. */
+function ujiWasapAdmin() {
+  CacheService.getScriptCache().removeAll([]);
+  hantarWasapAdmin("UJIAN: Notifikasi ralat OPR berfungsi. " + new Date().getTime());
 }
 
 /** Satu panggilan ke Groq + semua penapisan/pengesahan. */

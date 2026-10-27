@@ -252,12 +252,22 @@
         return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
       }
 
+      var dilapor = {};
+      function laporAdmin(m) {
+        try {
+          if (dilapor[m]) return; dilapor[m] = 1;
+          if (typeof API_URL === 'undefined') return setTimeout(function(){ delete dilapor[m]; laporAdmin(m); }, 3000);
+          fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action: 'laporRalat', mesej: m + ' | ' + navigator.userAgent.slice(0, 120) }) }).catch(function(){});
+        } catch (e) {}
+      }
+
       function tambah(jenis, mesej, butiran) {
         var rekod = { masa: masaKini(), jenis: jenis, mesej: String(mesej || ''), butiran: butiran ? String(butiran) : '' };
         senarai.push(rekod);
         if (senarai.length > HAD) senarai.shift();
         lukis();
-        if (jenis === 'ralat') kilat();
+        if (jenis === 'ralat') { kilat(); laporAdmin(rekod.mesej + (rekod.butiran ? ' @ ' + rekod.butiran : '')); }
         return rekod;
       }
 
@@ -543,7 +553,7 @@
     <input type="text" id="setSchoolAddress" value="Jalan Mahang, 09810 Serdang, Kedah Darul Aman">
 
     <label>No. Telefon & Emel (Hubungan):</label>
-    <input type="text" id="setSchoolContact" value="NO TEL : 01110661077 | EMEL: kba1008@moe.edu.my">
+    <input type="text" id="setSchoolContact" value="NO TEL : 01110661077 | EMEL: KBB1008@GMAIL.COM">
 
     <label>Muat Naik Logo Sekolah Baharu:</label>
     <input type="file" id="setSchoolLogo" accept="image/*">
@@ -1341,8 +1351,9 @@
     }
 
     function paparRalat(mesej) {
+      try { LogRalat.ralat('Jana laporan: ' + mesej); } catch (e) {}
       const textContainer = document.getElementById('oprText');
-      textContainer.textContent = mesej;
+      textContainer.textContent = 'Laporan tidak dapat dijana. Sila hubungi admin di no 01110661077.';
       textContainer.style.color = '#c53030';
       textContainer.style.fontWeight = 'bold';
       kemasKiniKiraan();
@@ -1352,7 +1363,7 @@
     // ================= 6. VIDEO + KOD QR + SIMPANAN PERANTI =================
     // SATU URL sahaja untuk teks, semakan versi dan video. Jangan guna URL berbeza.
     // Selepas Deploy > New version, URL deployment yang sama boleh dikekalkan.
-    const API_URL = "https://script.google.com/macros/s/AKfycbxShVfRZXjq1Tzj2BaT2spelBIO3Z946l7YK2dXH_sbCr8m0A-CJ9A8Nq38sZEZNvxC/exec";
+    const API_URL = "https://script.google.com/macros/s/AKfycbxA6xSbGILtW7FB9dmXaqiFWhBSiadydY3COO5Soh82bpqrJ8Pn3wL_GrfWNfAN0ePx/exec";
     let videosArray = [];
 
     async function ujiMuatNaikDrive() {
