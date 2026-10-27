@@ -630,7 +630,7 @@
     <div class="media-list" id="videoList"></div>
 
     <div class="btn-group">
-      <button onclick="window.print()" class="btn-print">📄 Simpan PDF</button>
+      <button id="btnSimpanPDF" onclick="simpanPDF()" class="btn-print">📄 Simpan PDF</button>
       <button id="btnKongsiPDF" onclick="kongsiPDF()" class="btn-chip">📲 Kongsi PDF (WhatsApp/Telegram)</button>
       <button onclick="simpanLaporan()" class="btn-chip">💾 Simpan</button>
       <button onclick="bukaSenaraiLaporan()" class="btn-chip">📂 Laporan Tersimpan</button>
@@ -1854,81 +1854,174 @@
     }
 
     // ---- Simpan & jana semula laporan (memori komputer / telefon) ----
-    /* ================= 7. KONGSI SEBAGAI PDF (WhatsApp/Telegram/dsb.) ================= */
+    /* ================= 7. JANA / SIMPAN / KONGSI PDF ================= */
+    const HAD_SAIZ_PDF = 4.8 * 1024 * 1024; // sasaran < 5MB
+    let cachePdf = null; // { blob, namaFail, tajuk }
+
+
+    // AI pilih nama fail (maksimum 5 perkataan) berdasarkan isi laporan
+    async function janaNamaFailAI(teksLaporan, tajuk) {
+      try {
+        const ringkasan = (teksLaporan || '').replace(/\s+/g, ' ').trim().slice(0, 1200);
+        if (ringkasan.length < 30) return null;
+        const prompt =
+          'Berdasarkan laporan sekolah berikut, cadangkan SATU nama fail PDF yang ringkas dan sesuai. ' +
+          'Syarat WAJIB: maksimum 5 patah perkataan sahaja, Bahasa Melayu, tanpa tanda baca, tanpa sambungan ".pdf", ' +
+          'tanpa kata "laporan" jika tidak perlu. Balas dengan nama fail sahaja, tiada ayat lain.\n\n' +
+          'TAJUK: ' + (tajuk || '-') + '\nLAPORAN: ' + ringkasan;
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify({ prompt: prompt, maxWords: 12, language: 'ms-MY',
+            instruction: 'Balas dengan nama fail maksimum 5 perkataan sahaja.' }),
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+        });
+        if (!response.ok) return null;
+        const result = JSON.parse(await response.text());
+        let nama = (result && result.success && typeof result.text === 'string') ? result.text.trim() : '';
+        if (!nama) return null;
+        nama = nama.split('\n')[0].replace(/["'.`]/g, '').trim();
+        const perkataan = nama.replace(/[^a-zA-Z0-9\s]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 5);
+        if (!perkataan.length) return null;
+        return 'OPR_' + perkataan.join('_') + '_' + Utilities_tarikhFail() + '.pdf';
+      } catch (e) {
+        LogRalat.info('Nama fail AI gagal, guna nama lalai: ' + (e && e.message));
+        return null;
+      }
+    }
+
+    async function janaPDF() {
+      if (typeof html2canvas === 'undefined' || !window.jspdf) {
+        throw new Error('Pustaka PDF belum dimuatkan. Sila sambung ke Internet dan muat semula halaman.');
+      }
+      const page = document.querySelector('.a4-page');
+      if (!page) throw new Error('Muka surat laporan tidak dijumpai.');
+
+      const scaler = document.getElementById('pageScaler');
+      const wrap = document.getElementById('pageWrap');
+      const transformAsal = scaler ? scaler.style.transform : '';
+      const wrapHeightAsal = wrap ? wrap.style.height : '';
+      if (scaler) scaler.style.transform = 'none';
+      if (wrap) wrap.style.height = 'auto';
+      await new Promise(r => setTimeout(r, 80));
+
+      // Skala 2 cukup tajam untuk A4 dan selamat untuk memori telefon
+      let canvas;
+      try {
+        try {
+          canvas = await html2canvas(page, {
+            scale: 2, useCORS: true, allowTaint: false, imageTimeout: 15000,
+            backgroundColor: '#ffffff', logging: false,
+            windowWidth: page.scrollWidth, windowHeight: page.scrollHeight
+          });
+        } catch (e1) {
+          // Cuba semula pada skala lebih rendah jika memori tidak mencukupi
+          canvas = await html2canvas(page, {
+            scale: 1.5, useCORS: true, backgroundColor: '#ffffff', logging: false,
+            windowWidth: page.scrollWidth, windowHeight: page.scrollHeight
+          });
+        }
+      } finally {
+        if (scaler) scaler.style.transform = transformAsal;
+        if (wrap) wrap.style.height = wrapHeightAsal;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const tajuk = ((document.querySelector('.report-title-bar h3') || {}).innerText || 'Laporan OPR').trim();
+      const teksLaporan = ((document.getElementById('oprText') || {}).innerText || '').trim();
+      const namaAI = await janaNamaFailAI(teksLaporan, tajuk);
+      const namaFail = namaAI || ('OPR_' + tajuk.replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 40) + '_' + Utilities_tarikhFail() + '.pdf');
+
+      // JPEG berkualiti tinggi; turunkan kualiti/resolusi sehingga saiz < 5MB
+      let kualiti = 0.92, src = canvas, blobPdf = null;
+      for (let cubaan = 0; cubaan < 8; cubaan++) {
+        const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
+        pdf.addImage(src.toDataURL('image/jpeg', kualiti), 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+        blobPdf = pdf.output('blob');
+        if (blobPdf.size <= HAD_SAIZ_PDF) break;
+        if (kualiti > 0.6) kualiti -= 0.1;
+        else {
+          const c2 = document.createElement('canvas');
+          c2.width = Math.round(src.width * 0.8); c2.height = Math.round(src.height * 0.8);
+          const ctx = c2.getContext('2d');
+          ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c2.width, c2.height);
+          ctx.drawImage(src, 0, 0, c2.width, c2.height);
+          src = c2;
+        }
+      }
+      canvas.width = canvas.height = 0; // bebaskan memori
+      LogRalat.info('PDF dijana: ' + (blobPdf.size / 1024 / 1024).toFixed(2) + ' MB');
+      cachePdf = { blob: blobPdf, namaFail, tajuk };
+      return cachePdf;
+    }
+
+    function pesanRalatPDF(e) {
+      const m = (e && e.message) || String(e);
+      if (/tainted|SecurityError/i.test(m)) return 'Gambar dalam laporan tidak dapat dibaca untuk PDF. Sila muat naik semula gambar dari telefon dan cuba lagi.';
+      if (/memory|allocation|Invalid array length|canvas/i.test(m)) return 'Memori telefon tidak mencukupi. Tutup aplikasi lain dan cuba lagi.';
+      return 'Gagal menyediakan PDF: ' + m;
+    }
+
+    async function simpanPDF() {
+      const btn = document.getElementById('btnSimpanPDF');
+      const teksAsal = btn ? btn.textContent : '';
+      try {
+        if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyediakan PDF...'; }
+        const r = await janaPDF();
+        muatTurunBlob(r.blob, r.namaFail);
+        await alertKustom('PDF disimpan (' + (r.blob.size / 1024 / 1024).toFixed(2) + ' MB): ' + r.namaFail, 'PDF Disimpan', 'info');
+      } catch (e) {
+        const pesan = pesanRalatPDF(e);
+        LogRalat.ralat(pesan);
+        await alertKustom(pesan, 'Gagal Simpan PDF', 'ralat');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = teksAsal || '📄 Simpan PDF'; }
+      }
+    }
+
+    async function kongsiFail(r) {
+      const filePdf = new File([r.blob], r.namaFail, { type: 'application/pdf' });
+      if (navigator.canShare && navigator.canShare({ files: [filePdf] })) {
+        await navigator.share({ files: [filePdf], title: r.tajuk });
+        LogRalat.info('PDF laporan dikongsi.');
+        return true;
+      }
+      return false;
+    }
+
     async function kongsiPDF() {
       const btn = document.getElementById('btnKongsiPDF');
       const teksAsal = btn ? btn.textContent : '';
+      let r;
       try {
-        if (typeof html2canvas === 'undefined' || !window.jspdf) {
-          await alertKustom('Ciri kongsi PDF memerlukan sambungan Internet pada kali pertama (untuk memuatkan pustaka PDF). Sila cuba lagi apabila online.', 'Tidak Dapat Dimuatkan', 'ralat');
-          return;
-        }
-        const page = document.querySelector('.a4-page');
-        if (!page) { await alertKustom('Muka surat laporan tidak dijumpai.', 'Ralat', 'ralat'); return; }
-
         if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyediakan PDF...'; }
-
-        // PENTING: pada telefon, #pageScaler diskalakan-kecil (CSS transform) oleh fitPage()
-        // supaya muat pada skrin. Jika html2canvas menangkap ketika transform ini aktif,
-        // ia menangkap versi kecil lalu direntang semula ke saiz A4 penuh dalam PDF —
-        // punca utama teks kabur/terabur. Jadi neutralkan transform dahulu, tangkap
-        // pada saiz penuh, kemudian pulihkan semula paparan asal.
-        const scaler = document.getElementById('pageScaler');
-        const wrap = document.getElementById('pageWrap');
-        const transformAsal = scaler ? scaler.style.transform : '';
-        const wrapHeightAsal = wrap ? wrap.style.height : '';
-        if (scaler) scaler.style.transform = 'none';
-        if (wrap) wrap.style.height = 'auto';
-        // Beri masa untuk browser reflow selepas transform dibuang
-        await new Promise(r => setTimeout(r, 50));
-
-        let canvas;
-        try {
-          canvas = await html2canvas(page, {
-            scale: Math.max(3, window.devicePixelRatio || 1),
-            useCORS: true,
-            backgroundColor: '#ffffff',
-            windowWidth: page.scrollWidth,
-            windowHeight: page.scrollHeight
-          });
-        } finally {
-          // Pulihkan paparan asal (skala telefon) selepas tangkapan selesai
-          if (scaler) scaler.style.transform = transformAsal;
-          if (wrap) wrap.style.height = wrapHeightAsal;
-        }
-
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-        // Guna PNG (bukan JPEG) supaya tepi huruf kekal tajam - JPEG mengaburkan teks
-        const dataUrl = canvas.toDataURL('image/png');
-        pdf.addImage(dataUrl, 'PNG', 0, 0, 210, 297);
-
-        const tajuk = (document.querySelector('.report-title-bar h3').innerText || 'Laporan OPR').trim();
-        const namaFail = 'OPR_' + tajuk.replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 40) + '_' + Utilities_tarikhFail() + '.pdf';
-        const blobPdf = pdf.output('blob');
-        const filePdf = new File([blobPdf], namaFail, { type: 'application/pdf' });
-
-        if (navigator.canShare && navigator.canShare({ files: [filePdf] })) {
-          await navigator.share({
-            files: [filePdf],
-            title: tajuk,
-            text: 'Laporan Satu Muka Surat (OPR): ' + tajuk
-          });
-          LogRalat.info('PDF laporan dikongsi melalui menu kongsi peranti.');
-        } else {
-          muatTurunBlob(blobPdf, namaFail);
-          await alertKustom('Peranti/pelayar ini tidak menyokong kongsi terus fail. PDF telah dimuat turun ke telefon anda — sila buka WhatsApp/Telegram dan lampirkan fail tersebut secara manual daripada storan/muat turun.', 'PDF Dimuat Turun', 'info');
-        }
+        r = await janaPDF();
       } catch (e) {
-        if (e && e.name === 'AbortError') { /* pengguna batalkan menu kongsi - bukan ralat */ }
-        else {
-          const pesan = huraiRalatRangkaian(e, 'Kongsi PDF');
-          LogRalat.ralat(pesan);
-          await alertKustom(pesan, 'Gagal Kongsi PDF', 'ralat');
-        }
-      } finally {
-        if (btn) { btn.disabled = false; btn.textContent = teksAsal || '📲 Kongsi PDF (WhatsApp/Telegram)'; }
+        const pesan = pesanRalatPDF(e);
+        LogRalat.ralat(pesan);
+        await alertKustom(pesan, 'Gagal Kongsi PDF', 'ralat');
+        if (btn) { btn.disabled = false; btn.textContent = teksAsal; }
+        return;
       }
+      if (btn) { btn.disabled = false; btn.textContent = teksAsal || '📲 Kongsi PDF (WhatsApp/Telegram)'; }
+
+      try {
+        // Cuba terus; pelayar mungkin menolak kerana penjanaan PDF mengambil masa
+        if (await kongsiFail(r)) return;
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+        if (!(e && e.name === 'NotAllowedError')) LogRalat.info('Kongsi terus gagal: ' + (e && e.message));
+        // Minta satu ketikan baharu supaya menu kongsi dibenarkan
+        try {
+          const ok = await confirmKustom('PDF sudah siap (' + (r.blob.size / 1024 / 1024).toFixed(2) + ' MB). Tekan "Kongsi" untuk buka WhatsApp/Telegram.', 'PDF Sedia', 'info', 'Kongsi');
+          if (!ok) return;
+          if (await kongsiFail(r)) return;
+        } catch (e2) {
+          if (e2 && e2.name === 'AbortError') return;
+          LogRalat.ralat('Kongsi gagal: ' + (e2 && e2.message));
+        }
+      }
+      muatTurunBlob(r.blob, r.namaFail);
+      await alertKustom('Peranti ini tidak membenarkan kongsi terus. PDF telah dimuat turun — buka WhatsApp/Telegram dan lampirkan fail daripada folder Muat Turun.', 'PDF Dimuat Turun', 'info');
     }
 
     function Utilities_tarikhFail() {

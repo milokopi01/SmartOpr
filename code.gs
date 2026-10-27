@@ -28,7 +28,11 @@ var MODELS = [
 // Bilangan percubaan maksimum keseluruhan (elak kuota terbakar)
 var MAX_PERCUBAAN = 6;
 
-var VERSI_SKRIP = "9.3-kongsi-pdf-whatsapp";
+var VERSI_SKRIP = "9.6-wasap-admin-siap";
+
+// Nombor WhatsApp admin lalai (format antarabangsa, tanpa +).
+// Boleh ditukar melalui sel B1 sheet 'apieky' tanpa mengubah kod.
+var NOMBOR_ADMIN_LALAI = "601110661077";
 
 // ID folder Google Drive khas untuk simpanan video aktiviti
 var FOLDER_VIDEO_ID = "1l1RNAGy9jyVnFkxDvk9UMt4cTdqcDW_c";
@@ -251,8 +255,8 @@ function doPost(e) {
 
     var maxWords = parseInt(data.maxWords, 10);
     if (isNaN(maxWords)) maxWords = 200;
-    maxWords = Math.min(400, Math.max(50, maxWords));
-    var minWords = Math.floor(maxWords * 0.75);
+    maxWords = Math.min(400, Math.max(5, maxWords));
+    var minWords = maxWords < 50 ? 1 : Math.floor(maxWords * 0.75);
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName("apieky") || ss.getSheetByName("apikey");
@@ -266,7 +270,13 @@ function doPost(e) {
       return respond({ success: false, error: "Tiada API Key dijumpai di lajur A." });
     }
 
-    var systemPrompt =
+    var systemPrompt;
+    if (maxWords < 50) {
+      systemPrompt =
+        "Anda pembantu yang menjawab dengan ringkas dan tepat mengikut arahan pengguna, " +
+        "dalam Bahasa Melayu Malaysia. Balas dengan jawapan akhir sahaja.";
+    } else {
+    systemPrompt =
       "Anda ialah pegawai pelapor sekolah di Malaysia. Tugas anda menulis teks Laporan Satu Muka Surat (OPR).\n" +
       "ARAHAN KETAT DAN MUTLAK:\n" +
       "1. BAHASA: Gunakan Bahasa Melayu Malaysia baku sepenuhnya. DILARANG sama sekali menggunakan perkataan, " +
@@ -279,6 +289,7 @@ function doPost(e) {
       "5. OUTPUT: Mula terus dengan ayat pertama laporan. DILARANG menulis proses berfikir, " +
       "analisis arahan, tag <think>, senarai semak, atau mukadimah seperti \"Berikut ialah laporan\" " +
       "atau \"Here is the report\".";
+    }
 
     // Ruang token lebih longgar supaya laporan tidak terpotong di tengah jalan.
     var maxTokens = Math.min(2000, Math.round(maxWords * 3.2) + 200);
@@ -289,12 +300,23 @@ function doPost(e) {
     var modelDigunakan = "";
     var percubaan = 0;
 
+    // GILIRAN KUNCI: setiap penjanaan bermula dengan kunci yang berbeza
+    // (disimpan dalam Script Properties) supaya kuota diagihkan sama rata.
+    var props = PropertiesService.getScriptProperties();
+    var giliran = parseInt(props.getProperty("KUNCI_GILIRAN") || "0", 10);
+    if (isNaN(giliran) || giliran < 0) giliran = 0;
+    var mulaKunci = giliran % keys.length;
+    props.setProperty("KUNCI_GILIRAN", String(giliran + 1));
+
+    // Cuba SEMUA kunci (bergilir) untuk setiap model sebelum mengaku gagal.
+    var hadCuba = Math.min(30, keys.length * MODELS.length);
+
     for (var m = 0; m < MODELS.length && !success; m++) {
-      for (var i = 0; i < keys.length && !success; i++) {
-        if (percubaan >= MAX_PERCUBAAN) break;
+      for (var k = 0; k < keys.length && !success; k++) {
+        if (percubaan >= hadCuba) break;
         percubaan++;
 
-        var apiKey = String(keys[i]).trim();
+        var apiKey = String(keys[(mulaKunci + k) % keys.length]).trim();
 
         try {
           var payload = {
@@ -350,9 +372,13 @@ function doPost(e) {
     }
 
     if (!success) {
+      // Jangan dedahkan mesej ralat pembekal (boleh mengandungi maklumat kunci).
+      hantarWasapAdmin("AMARAN OPR: Semua kunci API gagal atau habis kuota pada " +
+        Utilities.formatDate(new Date(), "Asia/Kuala_Lumpur", "dd/MM/yyyy HH:mm") +
+        ". Sila semak sheet 'apieky' dan tambah kunci baharu.");
       return respond({
         success: false,
-        error: "Gagal menjana laporan yang sah. " + lastErrorMessage + " Sila tekan Jana sekali lagi."
+        error: "Semua kunci API telah habis digunakan. Sila hubungi admin."
       });
     }
 
@@ -366,6 +392,40 @@ function doPost(e) {
 
   } catch (error) {
     return respond({ success: false, error: error.message });
+  }
+}
+
+
+/**
+ * Hantar amaran WhatsApp kepada admin secara senyap (CallMeBot).
+ * Tetapan dibaca daripada sheet 'apieky':
+ *   B1 = nombor WhatsApp admin (cth: 60123456789)
+ *   C1 = apikey CallMeBot admin
+ * Maksimum 1 mesej sejam supaya tidak spam. Semua ralat ditelan senyap.
+ */
+function hantarWasapAdmin(mesej) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName("apieky") || ss.getSheetByName("apikey");
+    if (!sheet) return;
+    var nombor = String(sheet.getRange("B1").getValue() || "").replace(/[^0-9]/g, "") || NOMBOR_ADMIN_LALAI;
+    var kunciWasap = String(sheet.getRange("C1").getValue() || "").trim();
+    if (!nombor || !kunciWasap) return; // apikey CallMeBot belum diisi - senyap sahaja
+
+    var props = PropertiesService.getScriptProperties();
+    var terakhir = parseInt(props.getProperty("WASAP_TERAKHIR") || "0", 10);
+    var kini = new Date().getTime();
+    if (kini - terakhir < 3600000) return; // had 1 mesej sejam
+    props.setProperty("WASAP_TERAKHIR", String(kini));
+
+    UrlFetchApp.fetch(
+      "https://api.callmebot.com/whatsapp.php?phone=" + nombor +
+      "&text=" + encodeURIComponent(mesej) +
+      "&apikey=" + encodeURIComponent(kunciWasap),
+      { "muteHttpExceptions": true }
+    );
+  } catch (e) {
+    // Senyap - notifikasi admin tidak boleh mengganggu pengguna.
   }
 }
 
@@ -401,12 +461,14 @@ function panggilGroq(apiKey, payload, maxWords) {
 
   calon = hadkanPerkataan(bersihkanBahasa(calon), maxWords);
 
-  if (kiraPerkataan(calon) < 40) {
-    return { ok: false, error: "Teks laporan terlalu pendek atau terpotong." };
-  }
+  if (maxWords >= 50) {
+    if (kiraPerkataan(calon) < 40) {
+      return { ok: false, error: "Teks laporan terlalu pendek atau terpotong." };
+    }
 
-  if (!kebanyakanBahasaMelayu(calon)) {
-    return { ok: false, error: "Teks yang dijana bukan Bahasa Melayu." };
+    if (!kebanyakanBahasaMelayu(calon)) {
+      return { ok: false, error: "Teks yang dijana bukan Bahasa Melayu." };
+    }
   }
 
   return { ok: true, teks: calon };
