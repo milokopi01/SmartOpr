@@ -1352,7 +1352,7 @@
     // ================= 6. VIDEO + KOD QR + SIMPANAN PERANTI =================
     // SATU URL sahaja untuk teks, semakan versi dan video. Jangan guna URL berbeza.
     // Selepas Deploy > New version, URL deployment yang sama boleh dikekalkan.
-    const API_URL = "https://script.google.com/macros/s/AKfycbxShVfRZXjq1Tzj2BaT2spelBIO3Z946l7YK2dXH_sbCr8m0A-CJ9A8Nq38sZEZNvxC/exec";
+    const API_URL = "https://script.google.com/macros/s/AKfycbxA6xSbGILtW7FB9dmXaqiFWhBSiadydY3COO5Soh82bpqrJ8Pn3wL_GrfWNfAN0ePx/exec";
     let videosArray = [];
 
     async function ujiMuatNaikDrive() {
@@ -1933,8 +1933,22 @@
       const namaAI = await janaNamaFailAI(teksLaporan, tajuk);
       const namaFail = namaAI || ('OPR_' + tajuk.replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 40) + '_' + Utilities_tarikhFail() + '.pdf');
 
-      // JPEG berkualiti tinggi; turunkan kualiti/resolusi sehingga saiz < 5MB
-      let kualiti = 0.92, src = canvas, blobPdf = null;
+      // Utama: PDF berteks sebenar (boleh diedit dalam PDF editor)
+      let blobPdf = null;
+      try {
+        blobPdf = await janaPDFTeks(page);
+      } catch (eT) {
+        LogRalat.info('PDF teks gagal, guna kaedah gambar: ' + (eT && eT.message));
+      }
+      if (blobPdf && blobPdf.size <= HAD_SAIZ_PDF) {
+        canvas.width = canvas.height = 0;
+        LogRalat.info('PDF teks dijana: ' + (blobPdf.size / 1024 / 1024).toFixed(2) + ' MB');
+        cachePdf = { blob: blobPdf, namaFail, tajuk };
+        return cachePdf;
+      }
+
+      // Sandaran: JPEG berkualiti tinggi; turunkan kualiti/resolusi sehingga saiz < 5MB
+      let kualiti = 0.92, src = canvas;
       for (let cubaan = 0; cubaan < 8; cubaan++) {
         const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
         pdf.addImage(src.toDataURL('image/jpeg', kualiti), 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
@@ -1954,6 +1968,41 @@
       LogRalat.info('PDF dijana: ' + (blobPdf.size / 1024 / 1024).toFixed(2) + ' MB');
       cachePdf = { blob: blobPdf, namaFail, tajuk };
       return cachePdf;
+    }
+
+    async function janaPDFTeks(page) {
+      const { jsPDF } = window.jspdf;
+      const scaler = document.getElementById('pageScaler');
+      const wrap = document.getElementById('pageWrap');
+      const tA = scaler ? scaler.style.transform : '', hA = wrap ? wrap.style.height : '';
+      if (scaler) scaler.style.transform = 'none';
+      if (wrap) wrap.style.height = 'auto';
+      try {
+        const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
+        const lebar = page.scrollWidth;
+        await new Promise((resolve, reject) => {
+          const t = setTimeout(() => reject(new Error('Masa tamat')), 45000);
+          pdf.html(page, {
+            x: 0, y: 0, width: 210, windowWidth: lebar, autoPaging: 'text',
+            html2canvas: {
+              useCORS: true, backgroundColor: '#ffffff', logging: false,
+              ignoreElements: el => el.classList && (el.classList.contains('zoom-controls') || el.classList.contains('ralat-butang') || el.classList.contains('ralat-panel'))
+            },
+            callback: () => { clearTimeout(t); resolve(); }
+          });
+        });
+        // Buang muka surat kosong berlebihan di hujung
+        while (pdf.getNumberOfPages() > 1) {
+          const n = pdf.getNumberOfPages();
+          const ops = (pdf.internal.pages[n] || []).join('');
+          if (/Tj|TJ|Do/.test(ops)) break;
+          pdf.deletePage(n);
+        }
+        return pdf.output('blob');
+      } finally {
+        if (scaler) scaler.style.transform = tA;
+        if (wrap) wrap.style.height = hA;
+      }
     }
 
     function pesanRalatPDF(e) {
